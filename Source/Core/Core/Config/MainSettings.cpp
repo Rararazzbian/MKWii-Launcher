@@ -449,6 +449,14 @@ const Info<bool> MAIN_ENABLE_DEBUGGING{{System::Main, "Interface", "DebugModeEna
 
 // Main.Analytics
 
+// Fork: first-run setup wizard and lobby identity. Kept in their own section so
+// they are obvious in Dolphin.ini and never collide with an upstream key.
+const Info<bool> MAIN_SETUP_WIZARD_COMPLETE{{System::Main, "MKWiiLauncher", "SetupComplete"}, false};
+const Info<std::string> MAIN_LOBBY_NICKNAME{{System::Main, "MKWiiLauncher", "Nickname"}, ""};
+const Info<bool> MAIN_LOBBY_IS_HOST{{System::Main, "MKWiiLauncher", "IsHost"}, true};
+const Info<std::string> MAIN_LOBBY_MICROPHONE{{System::Main, "MKWiiLauncher", "Microphone"}, ""};
+const Info<std::string> MAIN_MKW_GAME_PATH{{System::Main, "MKWiiLauncher", "GamePath"}, ""};
+
 const Info<std::string> MAIN_ANALYTICS_ID{{System::Main, "Analytics", "ID"}, ""};
 const Info<bool> MAIN_ANALYTICS_ENABLED{{System::Main, "Analytics", "Enabled"}, false};
 const Info<bool> MAIN_ANALYTICS_PERMISSION_ASKED{{System::Main, "Analytics", "PermissionAsked"},

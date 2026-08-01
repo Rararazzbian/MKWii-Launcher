@@ -33,6 +33,7 @@ class DragEnterEvent;
 class FreeLookWindow;
 class GameCount;
 class GameList;
+class LobbyScreen;
 class GBATASInputWindow;
 class GCTASInputWindow;
 class HotkeyScheduler;
@@ -242,6 +243,8 @@ private:
   MenuBar* m_menu_bar;
   SearchBar* m_search_bar;
   GameList* m_game_list;
+  // Fork: shown in place of the game list. See LobbyScreen.
+  LobbyScreen* m_lobby_screen;
   GameCount* m_game_count;
   RenderWidget* m_render_widget = nullptr;
   bool m_rendering_to_main;

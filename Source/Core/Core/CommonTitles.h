@@ -11,6 +11,9 @@ constexpr u64 BOOT2 = 0x0000000100000001;
 
 constexpr u64 SYSTEM_MENU = 0x0000000100000002;
 
+// "HACA". The Mii Channel is region free, so there is only one ID.
+constexpr u64 MII_CHANNEL = 0x0001000248414341;
+
 constexpr u64 SHOP = 0x0001000248414241;
 
 constexpr u64 KOREAN_SHOP = 0x000100024841424b;

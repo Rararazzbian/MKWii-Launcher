@@ -120,13 +120,23 @@ option(ENABLE_AUTOUPDATE "Enables support for automatic updates" ON)
 option(USE_RETRO_ACHIEVEMENTS "Enables integration with retroachievements.org" ON)
 option(ENABLE_CCACHE "Enables CCache compiler cache" OFF)
 
-# Maintainers: if you consider blanket disabling this for your users, please
-# consider the following points:
-#  * No data is being sent without explicit user approval (pop up box at first
-#    launch).
-#  * The Dolphin team relies on the data in order to understand the behavior
-#    of our software in the wild.
-option(ENABLE_ANALYTICS "Enables opt-in Analytics collection" ON)
+# Upstream note, kept for context:
+#   Maintainers: if you consider blanket disabling this for your users, please
+#   consider the following points:
+#    * No data is being sent without explicit user approval (pop up box at first
+#      launch).
+#    * The Dolphin team relies on the data in order to understand the behavior
+#      of our software in the wild.
+#
+# Fork: analytics are off unconditionally and the opt-in prompt never appears.
+# This is a plain set() rather than an option() on purpose - it cannot be turned
+# back on with -DENABLE_ANALYTICS=ON, because a launcher aimed at a private LAN
+# group should not have a first-run dialog asking to phone home at all.
+#
+# USE_ANALYTICS gates more than the prompt: without it AnalyticsReporter::Send()
+# compiles to nothing and the analytics controls disappear from the settings UI,
+# so this is a real kill switch rather than a changed default.
+set(ENABLE_ANALYTICS OFF)
 
 option(ENCODE_FRAMEDUMPS "Encode framedumps in AVI format" ON)
 

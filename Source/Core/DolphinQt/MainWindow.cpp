@@ -108,6 +108,7 @@
 #include "DolphinQt/NetPlay/NetPlaySetupDialog.h"
 #include "DolphinQt/QtUtils/DolphinFileDialog.h"
 #include "DolphinQt/QtUtils/FileOpenEventFilter.h"
+#include "DolphinQt/Lobby/LobbyScreen.h"
 #include "DolphinQt/QtUtils/ModalMessageBox.h"
 #include "DolphinQt/QtUtils/ParallelProgressDialog.h"
 #include "DolphinQt/QtUtils/QueueOnObject.h"
@@ -234,7 +235,15 @@ MainWindow::MainWindow(Core::System& system, std::unique_ptr<BootParameters> boo
 
   QSettings& settings = Settings::GetQSettings();
   restoreState(settings.value(QStringLiteral("mainwindow/state")).toByteArray());
-  restoreGeometry(settings.value(QStringLiteral("mainwindow/geometry")).toByteArray());
+  // Fork: a different settings key from upstream's "mainwindow/geometry". That
+  // one describes a window sized around a game list; restoring it here would
+  // reopen at that size with nothing but empty space below the lobby.
+  const QByteArray geometry =
+      settings.value(QStringLiteral("mainwindow/lobbygeometry")).toByteArray();
+  if (geometry.isEmpty())
+    resize(560, 340);
+  else
+    restoreGeometry(geometry);
   if (!Settings::Instance().IsBatchModeEnabled())
   {
     show();
@@ -361,7 +370,7 @@ MainWindow::~MainWindow()
   if (!Settings::Instance().IsBatchModeEnabled())
   {
     settings.setValue(QStringLiteral("mainwindow/state"), saveState());
-    settings.setValue(QStringLiteral("mainwindow/geometry"), saveGeometry());
+    settings.setValue(QStringLiteral("mainwindow/lobbygeometry"), saveGeometry());
   }
 
   settings.setValue(QStringLiteral("renderwidget/geometry"), m_render_widget_geometry);
@@ -453,6 +462,7 @@ void MainWindow::CreateComponents()
   m_search_bar = new SearchBar(this);
   m_game_count = new GameCount(this);
   m_game_list = new GameList(this);
+  m_lobby_screen = new LobbyScreen(this);
   m_render_widget = new RenderWidget;
   m_stack = new QStackedWidget(this);
 
@@ -589,7 +599,8 @@ void MainWindow::ConnectMenuBar()
   connect(m_menu_bar, &MenuBar::ShowList, m_game_list, &GameList::SetListView);
   connect(m_menu_bar, &MenuBar::ShowGrid, m_game_list, &GameList::SetGridView);
   connect(m_menu_bar, &MenuBar::PurgeGameListCache, m_game_list, &GameList::PurgeCache);
-  connect(m_menu_bar, &MenuBar::ShowSearch, m_search_bar, &SearchBar::Show);
+  // Fork: no ShowSearch connection. The search bar is hidden and no longer in a
+  // layout, so showing it would paint it over the top-left of the lobby screen.
 
   connect(m_menu_bar, &MenuBar::ColumnVisibilityToggled, m_game_list,
           &GameList::OnColumnVisibilityToggled);
@@ -739,32 +750,21 @@ void MainWindow::ConnectStack()
   auto* layout = new QVBoxLayout;
   widget->setLayout(layout);
 
-  layout->addWidget(m_game_list);
-  layout->addWidget(m_search_bar);
-  layout->addWidget(m_game_count);
+  // Fork: the launcher has exactly one game, so the game list, its search bar
+  // and its count are replaced by the lobby screen. The GameList object itself
+  // is kept alive and merely hidden - the menu bar, the recent files list and
+  // Play's game selection all still refer to it, and tearing it out would be a
+  // far larger change than hiding it.
+  m_game_list->hide();
+  m_search_bar->hide();
+  m_game_count->hide();
+
+  layout->addWidget(m_lobby_screen);
   layout->setSpacing(0);
-  layout->setContentsMargins(0, 0, 0, 0);
 
-  connect(m_search_bar, &SearchBar::Search, m_game_list, &GameList::SetSearchTerm);
-  connect(m_game_list, &GameList::GameCountUpdated, m_game_count, &GameCount::OnGameCountUpdated);
-
-  m_game_list->UpdateGameCount();
-
-  const auto update_spacing = [this](const bool game_count_is_visible) {
-    // The bottom margin of the search bar and the top margin of the game count are both suitable
-    // when the other widget is hidden, but when both are visible the gap created by the combination
-    // is too large. To fix this we set the bottom margin of the search bar to 0 when the game count
-    // is visible and set it to the top margin when the game count is hidden.
-    m_game_count->setVisible(game_count_is_visible);
-    auto* const search_layout = m_search_bar->layout();
-    QMargins search_margins = search_layout->contentsMargins();
-    const int new_bottom_margin = game_count_is_visible ? 0 : search_margins.top();
-    search_margins.setBottom(new_bottom_margin);
-    search_layout->setContentsMargins(search_margins);
-  };
-  update_spacing(Settings::Instance().IsGameCountVisible());
-
-  connect(&Settings::Instance(), &Settings::GameCountVisibilityChanged, update_spacing);
+  // Upstream also kept the search bar and game count in sync with each other's
+  // margins here. That is dropped along with them: the "Game Count" setting
+  // would otherwise call setVisible(true) and put the count back on screen.
 
   m_stack->addWidget(widget);
 
@@ -882,7 +882,34 @@ void MainWindow::Play(const std::optional<std::string>& savestate_path)
   else
   {
     std::shared_ptr<const UICommon::GameFile> selection = m_game_list->GetSelectedGame();
-    if (selection)
+
+    // Fork: Play launches the Brainslug loader off the virtual SD card rather
+    // than the disc. Brainslug applies the LAN Play Module and then boots the
+    // game itself, which it finds via the default ISO the setup wizard set.
+    // Booting the disc directly would start plain Mario Kart with no patch.
+    //
+    // A game list selection still wins, so a title started from the recent
+    // files menu behaves normally.
+    // Forward slashes rather than DIR_SEP: Windows accepts them throughout,
+    // and it saves pulling CommonPaths.h into this translation unit.
+    const QString brainslug = QString::fromStdString(
+        File::GetUserPath(D_WIISDCARDSYNCFOLDER_IDX) + "apps/brainslug/boot.dol");
+    if (!selection && QFile::exists(brainslug))
+    {
+      // Booting a DOL inserts no disc of its own; Boot.cpp's SetDefaultDisc()
+      // supplies one from the default ISO setting, and that is the only reason
+      // Brainslug finds a game at all. Kept in step here rather than trusting
+      // the wizard to have set it, so changing the game path later, or having
+      // run setup before this existed, cannot leave Brainslug sitting on
+      // "Waiting for game disk...".
+      const std::string game = Config::Get(Config::MAIN_MKW_GAME_PATH);
+      if (!game.empty() && Config::Get(Config::MAIN_DEFAULT_ISO) != game)
+        Config::SetBase(Config::MAIN_DEFAULT_ISO, game);
+
+      StartGame(brainslug, ScanForSecondDisc::No,
+                std::make_unique<BootSessionData>(savestate_path, DeleteSavestateAfterBoot::No));
+    }
+    else if (selection)
     {
       StartGame(selection->GetFilePath(), ScanForSecondDisc::Yes,
                 std::make_unique<BootSessionData>(savestate_path, DeleteSavestateAfterBoot::No));
@@ -1168,6 +1195,7 @@ void MainWindow::StartGame(const std::vector<std::string>& paths,
 
 void MainWindow::StartGame(std::unique_ptr<BootParameters>&& parameters)
 {
+
   if (parameters && std::holds_alternative<BootParameters::Disc>(parameters->parameters))
   {
     if (std::get<BootParameters::Disc>(parameters->parameters).volume->IsNKit())

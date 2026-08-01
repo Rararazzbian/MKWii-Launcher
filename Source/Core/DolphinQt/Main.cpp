@@ -41,6 +41,10 @@
 #endif
 #include "DolphinQt/Resources.h"
 #include "DolphinQt/Settings.h"
+#include "DolphinQt/Setup/SetupWizard.h"
+
+#include "Core/CommonTitles.h"
+#include "Core/WiiUtils.h"
 #include "DolphinQt/Translation.h"
 #include "DolphinQt/Updater.h"
 
@@ -274,6 +278,34 @@ int main(int argc, char* argv[])
 
     Settings::Instance().InitDefaultPalette();
     Settings::Instance().ApplyStyle();
+
+    // Fork: first run goes through setup instead of straight to the main
+    // window. Skipped in batch mode and when a game was passed on the command
+    // line, since neither has a user sitting in front of a wizard.
+    //
+    // Cancelling does not mark setup complete, so it runs again next launch.
+    // We exit rather than fall through: a launcher that has not been set up
+    // has no lobby identity, no system update and no verified game.
+    if (SetupWizard::IsRequired() && !Settings::Instance().IsBatchModeEnabled() && !game_specified)
+    {
+      SetupWizard wizard;
+      if (wizard.exec() != QDialog::Accepted)
+        return 0;
+
+      // Finishing setup boots straight into the Mii Channel. The console's own
+      // first-time setup is not needed for LAN play, so there is no reason to
+      // make the user walk through the System Menu to reach the one thing they
+      // do need. Handing this to MainWindow as boot parameters rather than
+      // calling BootWiiSystemMenu() means it starts through exactly the same
+      // path as any other boot.
+      //
+      // The Mii Channel arrives with the system update installed on the
+      // previous page, but fall back to the System Menu rather than failing to
+      // boot at all if it somehow is not there.
+      const u64 title = WiiUtils::IsTitleInstalled(Titles::MII_CHANNEL) ? Titles::MII_CHANNEL :
+                                                                          Titles::SYSTEM_MENU;
+      boot = std::make_unique<BootParameters>(BootParameters::NANDTitle{title});
+    }
 
     MainWindow win{Core::System::GetInstance(), std::move(boot),
                    static_cast<const char*>(options.get("movie"))};

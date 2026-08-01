@@ -116,7 +116,7 @@ void ToolBar::MakeActions()
   m_refresh_action = addAction(tr("Refresh"), [this] { emit RefreshPressed(); });
   m_refresh_action->setEnabled(false);
 
-  addSeparator();
+  QAction* const first_separator = addSeparator();
 
   m_pause_play_action = addAction(tr("Play"), this, &ToolBar::PlayPressed);
 
@@ -125,6 +125,17 @@ void ToolBar::MakeActions()
   m_screenshot_action = addAction(tr("ScrShot"), this, &ToolBar::ScreenShotPressed);
 
   addSeparator();
+
+  // Fork: the launcher shows only Play, Config, Graphics and Controllers.
+  // The actions are still created rather than deleted, because UpdateIcons(),
+  // UpdatePausePlayButton() and the emulation-state handlers all operate on
+  // them; hiding is the change that does not require touching any of that.
+  for (QAction* const action :
+       {m_open_action, m_refresh_action, m_stop_action, m_fullscreen_action, m_screenshot_action,
+        first_separator})
+  {
+    action->setVisible(false);
+  }
 
   m_config_action = addAction(tr("Config"), this, &ToolBar::SettingsPressed);
   m_graphics_action = addAction(tr("Graphics"), this, &ToolBar::GraphicsPressed);

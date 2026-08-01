@@ -270,6 +270,16 @@ extern const Info<bool> MAIN_ENABLE_DEBUGGING;
 
 // Main.Analytics
 
+// Fork: first-run setup wizard and lobby identity.
+extern const Info<bool> MAIN_SETUP_WIZARD_COMPLETE;
+extern const Info<std::string> MAIN_LOBBY_NICKNAME;
+// True = this machine hosts the lobby, false = it joins one.
+extern const Info<bool> MAIN_LOBBY_IS_HOST;
+// cubeb input device id for lobby voice chat. Empty = let cubeb pick.
+extern const Info<std::string> MAIN_LOBBY_MICROPHONE;
+// Path to the RMCE01 disc image the launcher boots.
+extern const Info<std::string> MAIN_MKW_GAME_PATH;
+
 extern const Info<std::string> MAIN_ANALYTICS_ID;
 extern const Info<bool> MAIN_ANALYTICS_ENABLED;
 extern const Info<bool> MAIN_ANALYTICS_PERMISSION_ASKED;

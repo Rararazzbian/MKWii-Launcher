@@ -386,8 +386,20 @@ add_executable(dolphin-emu
   Settings/TriforcePane.h
   Settings/USBDevicePicker.cpp
   Settings/USBDevicePicker.h
+  Lobby/LobbyScreen.cpp
+  Lobby/LobbyScreen.h
   Settings/WiiPane.cpp
   Settings/WiiPane.h
+  Setup/DownloadsPage.cpp
+  Setup/DownloadsPage.h
+  Setup/FinishPage.cpp
+  Setup/FinishPage.h
+  Setup/GamePathPage.cpp
+  Setup/GamePathPage.h
+  Setup/LobbyPage.cpp
+  Setup/LobbyPage.h
+  Setup/SetupWizard.cpp
+  Setup/SetupWizard.h
   SkylanderPortal/SkylanderModifyDialog.cpp
   SkylanderPortal/SkylanderModifyDialog.h
   SkylanderPortal/SkylanderPortalWindow.cpp

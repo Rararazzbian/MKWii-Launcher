@@ -242,11 +242,29 @@ void AudioPane::CreateWidgets()
   }
 #endif
 
+  // Fork: the lobby microphone. Duplicated here rather than shared with the
+  // setup wizard's copy because the wizard defers writing until Next is
+  // pressed, while a settings pane is expected to apply immediately.
+  auto* const lobby_box = new QGroupBox(tr("Lobby Voice Chat"));
+  auto* const lobby_layout = new QFormLayout(lobby_box);
+
+  std::vector<std::pair<QString, QString>> input_devices;
+#ifndef HAVE_CUBEB
+  input_devices.emplace_back(tr("Audio backend unsupported"), QStringLiteral(""));
+#else
+  input_devices.emplace_back(tr("Autodetect preferred microphone"), QStringLiteral(""));
+  for (const auto& [id, name] : CubebUtils::ListInputDevices())
+    input_devices.emplace_back(QString::fromStdString(name), QString::fromStdString(id));
+#endif
+  lobby_layout->addRow(tr("Microphone:"),
+                       new ConfigStringChoice(input_devices, Config::MAIN_LOBBY_MICROPHONE));
+
   auto* const main_vbox_layout = new QVBoxLayout;
 
   main_vbox_layout->addWidget(dsp_box);
   main_vbox_layout->addWidget(backend_box);
   main_vbox_layout->addWidget(playback_box);
+  main_vbox_layout->addWidget(lobby_box);
 #ifdef HAVE_CUBEB
   main_vbox_layout->addWidget(m_wiimote_routing_box);
 #endif
