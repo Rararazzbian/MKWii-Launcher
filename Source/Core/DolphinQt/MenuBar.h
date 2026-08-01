@@ -219,6 +219,10 @@ private:
   // Tools
   QAction* m_lobby_reconnect;
   QAction* m_lobby_auto_reconnect;
+#ifdef MKW_MEMORY_INSPECTOR_WEB
+  QAction* m_meminspect_open;
+  QAction* m_meminspect_enabled;
+#endif
   QAction* m_wad_install_action;
   QMenu* m_perform_online_update_menu;
   QAction* m_perform_online_update_for_current_region;

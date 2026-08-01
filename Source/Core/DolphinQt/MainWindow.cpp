@@ -61,6 +61,9 @@
 #include "Core/HW/Wiimote.h"
 #include "Core/HotkeyManager.h"
 #include "Core/IOS/USB/Bluetooth/BTEmu.h"
+#ifdef MKW_MEMORY_INSPECTOR_WEB
+#include "Core/MemInspect/WebServer.h"
+#endif
 #include "Core/Movie.h"
 #include "Core/NetPlayClient.h"
 #include "Core/NetPlayProto.h"
@@ -227,6 +230,15 @@ MainWindow::MainWindow(Core::System& system, std::unique_ptr<BootParameters> boo
   setAcceptDrops(true);
   setAttribute(Qt::WA_NativeWindow);
 
+#ifdef MKW_MEMORY_INSPECTOR_WEB
+  // Before CreateComponents, because the Tools menu reads whether the server is
+  // running to decide whether its "open" entry is usable. Starting it here
+  // rather than at boot means the dashboard is reachable while Dolphin sits in
+  // the lobby, which is when a stale watch is most convenient to fix.
+  if (Config::Get(Config::MAIN_MEMINSPECT_WEB))
+    MemInspect::Web::Start(static_cast<u16>(Config::Get(Config::MAIN_MEMINSPECT_WEB_PORT)));
+#endif
+
   CreateComponents();
 
   ConnectGameList();
@@ -350,6 +362,10 @@ MainWindow::~MainWindow()
   // Shut down NetPlay first to avoid race condition segfault
   Settings::Instance().ResetNetPlayClient();
   Settings::Instance().ResetNetPlayServer();
+
+#ifdef MKW_MEMORY_INSPECTOR_WEB
+  MemInspect::Web::Stop();
+#endif
 
 #ifdef USE_RETRO_ACHIEVEMENTS
   Config::RemoveConfigChangedCallback(m_config_changed_callback_id);

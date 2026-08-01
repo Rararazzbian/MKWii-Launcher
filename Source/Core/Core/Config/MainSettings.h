@@ -293,6 +293,16 @@ extern const Info<bool> MAIN_LOBBY_NET_TRACE;
 // turning off if it is costing frames.
 extern const Info<bool> MAIN_LOBBY_NET_TRACE_PAYLOADS;
 
+// Fork: the memory inspector's web dashboard. These only exist in a build
+// configured with MKW_MEMORY_INSPECTOR_WEB; with that off the server is not
+// compiled at all and these are never read.
+//
+// Whether the server runs. The port it listens on, on the loopback interface
+// only - the dashboard exposes writes into a running game, so it is not
+// something to put on a network.
+extern const Info<bool> MAIN_MEMINSPECT_WEB;
+extern const Info<int> MAIN_MEMINSPECT_WEB_PORT;
+
 extern const Info<std::string> MAIN_ANALYTICS_ID;
 extern const Info<bool> MAIN_ANALYTICS_ENABLED;
 extern const Info<bool> MAIN_ANALYTICS_PERMISSION_ASKED;

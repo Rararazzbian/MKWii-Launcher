@@ -502,6 +502,18 @@ add_library(core
   IOS/WFS/WFSSRV.h
   LibusbUtils.cpp
   LibusbUtils.h
+  MemInspect/Inspector.cpp
+  MemInspect/Inspector.h
+  MemInspect/Items.cpp
+  MemInspect/Items.h
+  MemInspect/Racers.cpp
+  MemInspect/Racers.h
+  MemInspect/Reader.cpp
+  MemInspect/Reader.h
+  MemInspect/Registry.cpp
+  MemInspect/Registry.h
+  MemInspect/States.cpp
+  MemInspect/States.h
   MemTools.cpp
   MemTools.h
   Movie.cpp
@@ -853,6 +865,21 @@ endif()
 if(MSVC)
   # Add precompiled header
   target_link_libraries(core PRIVATE use_pch)
+endif()
+
+# Fork: the memory inspector's dashboard server. The sampler above is always
+# built; this is the part that opens a socket and embeds a web page, so it is
+# added to the target only when asked for. With the option off there is nothing
+# of it in the binary at all. The definition is PUBLIC so DolphinQt sees it and
+# leaves out the menu entry to match.
+if(MKW_MEMORY_INSPECTOR_WEB)
+  target_sources(core PRIVATE
+    MemInspect/Dashboard.cpp
+    MemInspect/Dashboard.h
+    MemInspect/WebServer.cpp
+    MemInspect/WebServer.h
+  )
+  target_compile_definitions(core PUBLIC -DMKW_MEMORY_INSPECTOR_WEB)
 endif()
 
 if(USE_RETRO_ACHIEVEMENTS)

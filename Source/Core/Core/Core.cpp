@@ -61,6 +61,7 @@
 #include "Core/HW/Wiimote.h"
 #include "Core/Host.h"
 #include "Core/IOS/IOS.h"
+#include "Core/MemInspect/Inspector.h"
 #include "Core/MemTools.h"
 #include "Core/Movie.h"
 #include "Core/NetPlayClient.h"
@@ -385,6 +386,10 @@ static void CpuThread(Core::System& system, const std::optional<std::string>& sa
 
   // Enter CPU run loop. When we leave it - we are done.
   system.GetCPU().Run();
+
+  // Drop the last sample rather than leaving it to be served against whatever
+  // boots next, where the addresses would mean something else entirely.
+  MemInspect::Inspector::GetInstance().Reset();
 
 #ifdef USE_MEMORYWATCHER
   s_memory_watcher.reset();
@@ -893,6 +898,11 @@ void Callback_NewField(Core::System& system)
   }
 
   AchievementManager::GetInstance().DoFrame();
+
+  // Sampling guest memory belongs on this thread: it is the only one where a
+  // pointer chain cannot be chased across a half-finished write, and reading
+  // from anywhere else would mean pausing the core to do it. See MemInspect.
+  MemInspect::Inspector::GetInstance().OnFrame(system);
 }
 
 void UpdateTitle(Core::System& system)

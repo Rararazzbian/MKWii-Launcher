@@ -461,6 +461,9 @@ const Info<std::string> MAIN_LOBBY_HOST_ADDRESS{{System::Main, "MKWiiLauncher", 
 const Info<bool> MAIN_LOBBY_NET_TRACE{{System::Main, "MKWiiLauncher", "NetTrace"}, true};
 const Info<bool> MAIN_LOBBY_NET_TRACE_PAYLOADS{
     {System::Main, "MKWiiLauncher", "NetTracePayloads"}, true};
+const Info<bool> MAIN_MEMINSPECT_WEB{{System::Main, "MKWiiLauncher", "MemInspectWeb"}, true};
+const Info<int> MAIN_MEMINSPECT_WEB_PORT{{System::Main, "MKWiiLauncher", "MemInspectWebPort"},
+                                         5000};
 
 const Info<std::string> MAIN_ANALYTICS_ID{{System::Main, "Analytics", "ID"}, ""};
 const Info<bool> MAIN_ANALYTICS_ENABLED{{System::Main, "Analytics", "Enabled"}, false};

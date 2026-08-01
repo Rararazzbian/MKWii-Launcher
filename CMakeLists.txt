@@ -118,6 +118,17 @@ option(USE_DISCORD_PRESENCE "Enables Discord Rich Presence, show the current gam
 option(USE_MGBA "Enables GBA controllers emulation using libmgba" ON)
 option(ENABLE_AUTOUPDATE "Enables support for automatic updates" ON)
 option(USE_RETRO_ACHIEVEMENTS "Enables integration with retroachievements.org" ON)
+
+# Fork: the memory inspector's web dashboard. The inspector itself - the address
+# registry, the reader and the CPU-thread sampler - is always built and costs
+# essentially nothing. This option controls only the HTTP server that serves the
+# dashboard and accepts writes into a running game.
+#
+# TURN THIS OFF FOR A BUILD YOU HAND TO ANYONE ELSE. With it off, WebServer.cpp
+# and Dashboard.cpp are not compiled, the menu entry is not created, and there is
+# no listening socket and no embedded page anywhere in the binary.
+option(MKW_MEMORY_INSPECTOR_WEB
+       "Serve the memory inspector dashboard over HTTP on localhost" ON)
 option(ENABLE_CCACHE "Enables CCache compiler cache" OFF)
 
 # Upstream note, kept for context:

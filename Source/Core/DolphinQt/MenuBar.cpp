@@ -37,6 +37,9 @@
 #include "Core/IOS/FS/FileSystem.h"
 #include "Core/IOS/IOS.h"
 #include "Core/IOS/USB/Bluetooth/BTEmu.h"
+#ifdef MKW_MEMORY_INSPECTOR_WEB
+#include "Core/MemInspect/WebServer.h"
+#endif
 #include "Core/Movie.h"
 #include "Core/NetPlayProto.h"
 #include "Core/PowerPC/JitInterface.h"
@@ -303,6 +306,45 @@ void MenuBar::AddToolsMenu()
           [](bool enabled) { Lobby::SetAutoReconnect(enabled); });
 
   tools_menu->addSeparator();
+
+#ifdef MKW_MEMORY_INSPECTOR_WEB
+  // The inspector's dashboard. The whole thing - this entry included - is gone
+  // from a build configured with -DMKW_MEMORY_INSPECTOR_WEB=OFF.
+  m_meminspect_open = tools_menu->addAction(tr("&Memory Inspector"), this, [this] {
+    const std::string url = MemInspect::Web::GetURL();
+    if (url.empty())
+    {
+      OSD::AddMessage("The memory inspector is not serving", OSD::Duration::NORMAL,
+                      OSD::Color::YELLOW);
+      return;
+    }
+    QDesktopServices::openUrl(QUrl(QString::fromStdString(url)));
+  });
+
+  m_meminspect_enabled = tools_menu->addAction(tr("Serve the Memory &Inspector"));
+  m_meminspect_enabled->setCheckable(true);
+  m_meminspect_enabled->setChecked(Config::Get(Config::MAIN_MEMINSPECT_WEB));
+  connect(m_meminspect_enabled, &QAction::toggled, this, [this](bool enabled) {
+    Config::SetBase(Config::MAIN_MEMINSPECT_WEB, enabled);
+    if (enabled)
+    {
+      const int port = Config::Get(Config::MAIN_MEMINSPECT_WEB_PORT);
+      if (!MemInspect::Web::Start(static_cast<u16>(port)))
+      {
+        OSD::AddMessage(fmt::format("Could not listen on 127.0.0.1:{}", port),
+                        OSD::Duration::NORMAL, OSD::Color::RED);
+      }
+    }
+    else
+    {
+      MemInspect::Web::Stop();
+    }
+    m_meminspect_open->setEnabled(MemInspect::Web::IsRunning());
+  });
+  m_meminspect_open->setEnabled(MemInspect::Web::IsRunning());
+
+  tools_menu->addSeparator();
+#endif
 
   tools_menu->addAction(tr("&Resource Pack Manager"), this,
                         [this] { emit ShowResourcePackManager(); });
