@@ -8,6 +8,11 @@
 namespace Common
 {
 const std::string& GetEmulatorName();
+// The name shown to the user in the main window title and while a game is
+// running. This fork brands itself, so it is deliberately NOT GetScmRevStr():
+// that string is written into savestate headers and shader cache files, where
+// changing it would invalidate every file produced by a stock build.
+const std::string& GetLauncherTitleStr();
 const std::string& GetScmDescStr();
 const std::string& GetScmBranchStr();
 const std::string& GetScmRevStr();

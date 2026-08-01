@@ -303,6 +303,37 @@ void CreateDirectories()
 
 void SetUserDirectory(std::string custom_path)
 {
+#ifndef ANDROID
+  // ---------------------------------------------------------------------
+  // Fork change: this build is unconditionally portable.
+  //
+  // User data always lives in User/ next to the executable. Every upstream
+  // way of relocating it is bypassed on purpose:
+  //
+  //   - the -u / --user command line flag (custom_path, ignored below)
+  //   - Binaries/portable.txt, which is no longer needed or consulted
+  //   - HKCU\Software\Dolphin Emulator\LocalUserConfig
+  //   - HKCU\Software\Dolphin Emulator\UserConfigPath
+  //   - the pre-PR-10708 Documents\Dolphin Emulator folder
+  //   - AppData\Roaming\Dolphin Emulator
+  //
+  // The point is isolation: a stock Dolphin or CTGP install on the same
+  // machine shares that AppData directory, and this build must never read or
+  // write its config. As a side effect nothing here writes UserConfigPath to
+  // the registry any more, so running this build leaves no trace outside its
+  // own folder.
+  //
+  // The upstream detection logic is preserved verbatim below for Android and
+  // for future merges.
+  //
+  // Note this makes the build directory stateful: `-Fresh` or deleting the
+  // build tree also deletes your configs, saves and NAND.
+  // ---------------------------------------------------------------------
+  (void)custom_path;  // deliberately ignored, see above
+  const std::string portable_path = File::GetExeDirectory() + DIR_SEP PORTABLE_USER_DIR DIR_SEP;
+  File::CreateFullPath(portable_path);
+  File::SetUserPath(D_USER_IDX, portable_path);
+#else
   if (!custom_path.empty())
   {
     File::CreateFullPath(custom_path + DIR_SEP);
@@ -480,6 +511,7 @@ void SetUserDirectory(std::string custom_path)
   }
 #endif
   File::SetUserPath(D_USER_IDX, std::move(user_path));
+#endif  // ANDROID
 }
 
 bool TriggerSTMPowerEvent()

@@ -41,6 +41,17 @@ const std::string& GetScmRevStr()
   return scm_rev_str;
 }
 
+#define LAUNCHER_NAME "Razz's MKWii Launcher"
+
+const std::string& GetLauncherTitleStr()
+{
+  // GetScmRevStr() already starts with the emulator name, so this yields
+  // "Razz's MKWii Launcher - Dolphin 2606-263", and once there are commits on
+  // top of master, "... - Dolphin [vlan-voice] 2606-263".
+  static const std::string launcher_title_str = LAUNCHER_NAME " - " + GetScmRevStr();
+  return launcher_title_str;
+}
+
 const std::string& GetScmRevGitStr()
 {
   static const std::string scm_rev_git_str = SCM_REV_STR;

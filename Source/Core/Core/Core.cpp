@@ -902,7 +902,9 @@ void UpdateTitle(Core::System& system)
       "{} {} | {} | {}", system.GetPowerPC().GetCPUName(), system.IsDualCoreMode() ? "DC" : "SC",
       g_video_backend->GetDisplayName(), Config::Get(Config::MAIN_DSP_HLE) ? "HLE" : "LLE");
 
-  std::string message = fmt::format("{} | {}", Common::GetScmRevStr(), SSettings);
+  // Branded name here too, so the title does not revert to plain "Dolphin"
+  // the moment a game boots.
+  std::string message = fmt::format("{} | {}", Common::GetLauncherTitleStr(), SSettings);
   if (Config::Get(Config::MAIN_SHOW_ACTIVE_TITLE))
   {
     const std::string& title = SConfig::GetInstance().GetTitleDescription();
