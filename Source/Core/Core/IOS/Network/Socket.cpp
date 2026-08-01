@@ -24,6 +24,8 @@
 #include "Core/Core.h"
 #include "Core/IOS/Device.h"
 #include "Core/IOS/IOS.h"
+#include "Core/Lobby/NetTrace.h"
+#include "Core/Lobby/VirtualNet.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
 #include "Core/WC24PatchEngine.h"
@@ -85,6 +87,34 @@ static s32 TranslateErrorCode(s32 native_error, bool is_rw)
   }
 }
 
+namespace
+{
+// The console is big-endian, so the address and port in a WiiSockAddrIn are
+// already in network byte order once copied out of emulated memory. The virtual
+// network works in host byte order throughout, so the two conversions live here
+// rather than being repeated at each call site.
+struct WiiEndpoint
+{
+  u32 ip;
+  u16 port;
+};
+
+WiiEndpoint FromWiiAddr(const WiiSockAddrIn& addr)
+{
+  return WiiEndpoint{ntohl(addr.addr.addr), ntohs(addr.port)};
+}
+
+WiiSockAddrIn ToWiiAddr(u32 ip, u16 port)
+{
+  WiiSockAddrIn addr{};
+  addr.len = sizeof(WiiSockAddrIn);
+  addr.family = AF_INET;
+  addr.port = htons(port);
+  addr.addr.addr = htonl(ip);
+  return addr;
+}
+}  // namespace
+
 WiiSockMan::WiiSockMan(EmulationKernel& ios) : m_ios(ios)
 {
 }
@@ -130,10 +160,19 @@ s32 WiiSockMan::GetNetErrorCode(s32 ret, std::string_view caller, bool is_rw)
 
 WiiSocket::~WiiSocket()
 {
-  if (fd >= 0)
+  if (fd >= 0 || m_vsock)
   {
     (void)CloseFd();
   }
+}
+
+void WiiSocket::SetVirtual(VirtualNet::SocketPtr socket)
+{
+  if (fd >= 0)
+    (void)CloseFd();
+
+  nonBlock = false;
+  m_vsock = std::move(socket);
 }
 
 void WiiSocket::SetFd(s32 s)
@@ -165,6 +204,42 @@ s32 WiiSocket::Shutdown(u32 how)
 {
   if (how > 2)
     return -SO_EINVAL;
+
+  if (IsVirtual())
+  {
+    const s32 ret = VirtualNet::Shutdown(m_vsock, how);
+    const bool shut_read = how == 0 || how == 2;
+    const bool shut_write = how == 1 || how == 2;
+    // Pending operations are abandoned exactly as on the host path; the values
+    // come from the same hwtest.
+    for (auto& op : pending_sockops)
+    {
+      if (op.is_ssl)
+        continue;
+      switch (op.net_type)
+      {
+      case IOCTL_SO_ACCEPT:
+        if (shut_write)
+          Abort(&op, -SO_EINVAL);
+        break;
+      case IOCTL_SO_CONNECT:
+        if (shut_write && !nonBlock)
+          Abort(&op, -SO_ENETUNREACH);
+        break;
+      case IOCTLV_SO_RECVFROM:
+        if (shut_read)
+          Abort(&op, -SO_ENOTCONN);
+        break;
+      case IOCTLV_SO_SENDTO:
+        if (shut_write)
+          Abort(&op, -SO_ENOTCONN);
+        break;
+      default:
+        break;
+      }
+    }
+    return ret;
+  }
 
   // The Wii does nothing and returns 0 for IP_PROTO_UDP
   int so_type;
@@ -214,6 +289,21 @@ s32 WiiSocket::Shutdown(u32 how)
 s32 WiiSocket::CloseFd()
 {
   s32 ReturnValue = 0;
+
+  if (m_vsock)
+  {
+    ReturnValue = VirtualNet::Close(m_vsock);
+    m_vsock.reset();
+
+    for (auto it = pending_sockops.begin(); it != pending_sockops.end();)
+    {
+      m_socket_manager.EnqueueIPCReply(it->request, -SO_ENOTCONN);
+      it = pending_sockops.erase(it);
+    }
+    connecting_state = ConnectingState::None;
+    return ReturnValue;
+  }
+
   if (fd >= 0)
   {
     s32 ret = closesocket(fd);
@@ -273,7 +363,11 @@ void WiiSocket::Update(bool read, bool write, bool except)
     s32 ReturnValue = 0;
     bool forceNonBlock = false;
     IPCCommandType ct = it->request.command;
-    if (!it->is_ssl && ct == IPC_CMD_IOCTL)
+    if (IsVirtual())
+    {
+      ReturnValue = UpdateVirtual(*it, forceNonBlock);
+    }
+    else if (!it->is_ssl && ct == IPC_CMD_IOCTL)
     {
       IOCtlRequest ioctl{system, it->request.address};
       switch (it->net_type)
@@ -732,6 +826,175 @@ void WiiSocket::Update(bool read, bool write, bool except)
   }
 }
 
+s32 WiiSocket::UpdateVirtual(const sockop& op, bool& force_non_block)
+{
+  auto& system = m_socket_manager.m_ios.GetSystem();
+  auto& memory = system.GetMemory();
+
+  if (op.is_ssl)
+  {
+    // mbedtls reads and writes through a host descriptor, and a virtual socket
+    // does not have one to give it. Nothing on an isolated LAN needs TLS, so
+    // this fails outright rather than half-working and timing out later.
+    VNET_TRACE(Error, "TLS was requested on virtual socket {}; refused", wii_fd);
+    return SSL_ERR_FAILED;
+  }
+
+  if (op.request.command == IPC_CMD_IOCTL)
+  {
+    const IOCtlRequest ioctl{system, op.request.address};
+
+    switch (op.net_type)
+    {
+    case IOCTL_SO_FCNTL:
+      return FCntl(memory.Read_U32(ioctl.buffer_in + 4), memory.Read_U32(ioctl.buffer_in + 8));
+
+    case IOCTL_SO_BIND:
+    {
+      WiiSockAddrIn addr;
+      memory.CopyFromEmu(&addr, ioctl.buffer_in + 8, sizeof(addr));
+      const WiiEndpoint local = FromWiiAddr(addr);
+      const s32 ret = VirtualNet::Bind(m_vsock, local.ip, local.port);
+      INFO_LOG_FMT(IOS_NET, "IOCTL_SO_BIND ({:08x}, {}) = {}", wii_fd,
+                   Lobby::Trace::FormatEndpoint(local.ip, local.port), ret);
+      return ret;
+    }
+
+    case IOCTL_SO_CONNECT:
+    {
+      WiiSockAddrIn addr;
+      memory.CopyFromEmu(&addr, ioctl.buffer_in + 8, sizeof(addr));
+      const WiiEndpoint remote = FromWiiAddr(addr);
+      s32 ret = VirtualNet::Connect(m_vsock, remote.ip, remote.port);
+      UpdateConnectingState(ret);
+
+      // A blocking connect is retried by the caller until it stops saying "in
+      // progress"; without this it would retry forever against a peer that is
+      // not answering.
+      if (!nonBlock)
+      {
+        switch (ret)
+        {
+        case -SO_EAGAIN:
+        case -SO_EALREADY:
+        case -SO_EINPROGRESS:
+          if (std::chrono::steady_clock::now() > GetTimeout())
+          {
+            ret = -SO_ENETUNREACH;
+            ResetTimeout();
+            connecting_state = ConnectingState::Error;
+          }
+          break;
+        case -SO_EISCONN:
+          ret = SO_SUCCESS;
+          connecting_state = ConnectingState::Connected;
+          [[fallthrough]];
+        default:
+          ResetTimeout();
+        }
+      }
+
+      INFO_LOG_FMT(IOS_NET, "IOCTL_SO_CONNECT ({:08x}, {}) = {}", wii_fd,
+                   Lobby::Trace::FormatEndpoint(remote.ip, remote.port), ret);
+      return ret;
+    }
+
+    case IOCTL_SO_ACCEPT:
+    {
+      u32 from_ip = 0;
+      u16 from_port = 0;
+      s32 error = 0;
+      VirtualNet::SocketPtr accepted =
+          VirtualNet::Accept(m_vsock, &from_ip, &from_port, &error);
+      if (!accepted)
+        return error;
+
+      if (ioctl.buffer_out_size > 0)
+      {
+        const WiiSockAddrIn addr = ToWiiAddr(from_ip, from_port);
+        memory.CopyToEmu(ioctl.buffer_out, &addr, sizeof(addr));
+      }
+      return m_socket_manager.AddVirtualSocket(std::move(accepted), true);
+    }
+
+    default:
+      return 0;
+    }
+  }
+
+  if (op.request.command != IPC_CMD_IOCTLV)
+    return 0;
+
+  const IOCtlVRequest ioctlv{system, op.request.address};
+  const u32 buffer_in = ioctlv.in_vectors.empty() ? 0 : ioctlv.in_vectors[0].address;
+  const u32 buffer_in_size = ioctlv.in_vectors.empty() ? 0 : ioctlv.in_vectors[0].size;
+  const u32 buffer_in2 = ioctlv.in_vectors.size() > 1 ? ioctlv.in_vectors[1].address : 0;
+  const u32 buffer_out = ioctlv.io_vectors.empty() ? 0 : ioctlv.io_vectors[0].address;
+  const u32 buffer_out_size = ioctlv.io_vectors.empty() ? 0 : ioctlv.io_vectors[0].size;
+  const u32 buffer_out2 = ioctlv.io_vectors.size() > 1 ? ioctlv.io_vectors[1].address : 0;
+  const u32 buffer_out_size2 = ioctlv.io_vectors.size() > 1 ? ioctlv.io_vectors[1].size : 0;
+
+  switch (op.net_type)
+  {
+  case IOCTLV_SO_SENDTO:
+  {
+    const u32 flags = memory.Read_U32(buffer_in2 + 0x04);
+    const u32 has_destaddr = memory.Read_U32(buffer_in2 + 0x08);
+    force_non_block = (flags & SO_MSG_NONBLOCK) == SO_MSG_NONBLOCK;
+
+    WiiEndpoint remote{};
+    if (has_destaddr)
+    {
+      WiiSockAddrIn addr;
+      memory.CopyFromEmu(&addr, buffer_in2 + 0x0C, sizeof(addr));
+      remote = FromWiiAddr(addr);
+    }
+
+    // WC24PatchEngine deliberately does not run here. It rewrites payloads
+    // bound for Nintendo's servers, and none of them are reachable from an
+    // isolated subnet; letting it edit game traffic would only corrupt it.
+    const u8* const data = memory.GetPointerForRange(buffer_in, buffer_in_size);
+    const s32 ret =
+        VirtualNet::SendTo(m_vsock, data, buffer_in_size, has_destaddr != 0, remote.ip,
+                           remote.port);
+
+    INFO_LOG_FMT(IOS_NET, "{} ({:08x}, {}) = {}",
+                 has_destaddr ? "IOCTLV_SO_SENDTO" : "IOCTLV_SO_SEND", wii_fd,
+                 Lobby::Trace::FormatEndpoint(remote.ip, remote.port), ret);
+    return ret;
+  }
+
+  case IOCTLV_SO_RECVFROM:
+  {
+    const u32 flags = memory.Read_U32(buffer_in + 0x04);
+    force_non_block = (flags & SO_MSG_NONBLOCK) == SO_MSG_NONBLOCK;
+    const bool peek = (flags & SO_MSG_PEEK) == SO_MSG_PEEK;
+    const bool want_source = buffer_out_size2 != 0;
+
+    u8* const data = memory.GetPointerForRange(buffer_out, buffer_out_size);
+
+    u32 from_ip = 0;
+    u16 from_port = 0;
+    const s32 ret = VirtualNet::RecvFrom(m_vsock, data, buffer_out_size, peek, want_source,
+                                         &from_ip, &from_port);
+
+    if (ret >= 0 && want_source)
+    {
+      const WiiSockAddrIn addr = ToWiiAddr(from_ip, from_port);
+      memory.CopyToEmu(buffer_out2, &addr, sizeof(addr));
+    }
+
+    INFO_LOG_FMT(IOS_NET, "{} ({:08x}, {}) = {}",
+                 want_source ? "IOCTLV_SO_RECVFROM" : "IOCTLV_SO_RECV", wii_fd,
+                 Lobby::Trace::FormatEndpoint(from_ip, from_port), ret);
+    return ret;
+  }
+
+  default:
+    return 0;
+  }
+}
+
 void WiiSocket::UpdateConnectingState(s32 connect_rv)
 {
   if (connect_rv == -SO_EAGAIN || connect_rv == -SO_EALREADY || connect_rv == -SO_EINPROGRESS)
@@ -750,6 +1013,16 @@ void WiiSocket::UpdateConnectingState(s32 connect_rv)
 
 WiiSocket::ConnectingState WiiSocket::GetConnectingState() const
 {
+  if (IsVirtual())
+  {
+    // The virtual stack knows this outright, so there is nothing to probe for.
+    if (VirtualNet::IsConnecting(m_vsock))
+      return ConnectingState::Connecting;
+    if (VirtualNet::IsConnected(m_vsock))
+      return ConnectingState::Connected;
+    return connecting_state;
+  }
+
   const auto state = Common::SaveNetworkErrorState();
   Common::ScopeGuard guard([&state] { Common::RestoreNetworkErrorState(state); });
 
@@ -827,6 +1100,9 @@ WiiSocket::ConnectingState WiiSocket::GetConnectingState() const
 
 bool WiiSocket::IsTCP() const
 {
+  if (IsVirtual())
+    return VirtualNet::IsStream(m_vsock);
+
   const auto state = Common::SaveNetworkErrorState();
   Common::ScopeGuard guard([&state] { Common::RestoreNetworkErrorState(state); });
 
@@ -922,6 +1198,48 @@ s32 WiiSockMan::AddSocket(s32 fd, bool is_rw)
   return wii_fd;
 }
 
+s32 WiiSockMan::AddVirtualSocket(VirtualNet::SocketPtr socket, bool is_rw)
+{
+  const char* const caller = is_rw ? "SO_ACCEPT" : "NewSocket";
+
+  if (!socket)
+  {
+    VNET_TRACE(Error, "{}: the virtual network refused to open a socket", caller);
+    SetLastNetError(-SO_ENOBUFS);
+    return -SO_ENOBUFS;
+  }
+
+  s32 wii_fd = 0;
+  for (; wii_fd < WII_SOCKET_FD_MAX; ++wii_fd)
+  {
+    if (!WiiSockets.contains(wii_fd))
+      break;
+  }
+
+  if (wii_fd == WII_SOCKET_FD_MAX)
+  {
+    VirtualNet::Close(socket);
+    wii_fd = -SO_EMFILE;
+    ERROR_LOG_FMT(IOS_NET, "{} failed: Too many open sockets, ret={}", caller, wii_fd);
+  }
+  else
+  {
+    WiiSocket& sock = WiiSockets.emplace(wii_fd, *this).first->second;
+    sock.SetVirtual(std::move(socket));
+    sock.SetWiiFd(wii_fd);
+    VNET_TRACE(Socket, "{} gave the console descriptor {}", caller, wii_fd);
+  }
+
+  SetLastNetError(wii_fd);
+  return wii_fd;
+}
+
+VirtualNet::SocketPtr WiiSockMan::GetVirtualSocket(s32 wii_fd) const
+{
+  const auto entry = WiiSockets.find(wii_fd);
+  return entry == WiiSockets.end() ? nullptr : entry->second.m_vsock;
+}
+
 bool WiiSockMan::IsSocketBlocking(s32 wii_fd) const
 {
   const auto it = WiiSockets.find(wii_fd);
@@ -948,6 +1266,25 @@ s32 WiiSockMan::NewSocket(s32 af, s32 type, s32 protocol)
     // Neither an AF_INET nor an AF_INET6 socket.
     // Unsupported.
     return -SO_EAFNOSUPPORT;
+  }
+
+  // The virtual network answers before any of the host-socket rules, because
+  // several of them describe host limitations rather than the console's. A raw
+  // socket is one: SO_ICMPSOCKET asks for one, and upstream has to refuse it
+  // because opening a raw socket on the host needs privileges. Here it costs
+  // nothing.
+  if (VirtualNet::IsActive())
+  {
+    if (af != AF_INET)
+    {
+      VNET_TRACE(Error, "socket() asked for address family {}; the virtual network is IPv4 only",
+                 af);
+      return -SO_EAFNOSUPPORT;
+    }
+    // `type` still holds what IOS asked for: 1 and 2 are the Wii's own values
+    // for stream and datagram, and SOCK_RAW is 3 on every platform Dolphin
+    // builds for, which is the value the virtual network uses as well.
+    return AddVirtualSocket(VirtualNet::Create(type, protocol), false);
   }
 
   if (protocol != 0)  // IPPROTO_IP
@@ -994,6 +1331,14 @@ void WiiSockMan::EnqueueIPCReply(const Request& request, s32 return_value) const
 
 void WiiSockMan::Update()
 {
+  // With a lobby up every socket is virtual, so there is nothing for select()
+  // to be handed - and calling it with an empty set is an error on Windows.
+  if (VirtualNet::IsActive())
+  {
+    UpdateVirtual();
+    return;
+  }
+
   s32 nfds = 0;
   fd_set read_fds, write_fds, except_fds;
   timeval t = {0, 0};
@@ -1007,7 +1352,17 @@ void WiiSockMan::Update()
   while (socket_iter != end_socks)
   {
     const WiiSocket& sock = socket_iter->second;
-    if (sock.IsValid())
+    if (sock.IsVirtual())
+    {
+      // The virtual network went away underneath a socket that belongs to it -
+      // the lobby stopped while the console kept running. There is no host
+      // descriptor here and there never was, so it must not reach FD_SET, which
+      // would be handed -1.
+      VNET_TRACE(Error, "descriptor {} is virtual but the virtual network is down; dropping it",
+                 socket_iter->first);
+      socket_iter = WiiSockets.erase(socket_iter);
+    }
+    else if (sock.IsValid())
     {
       FD_SET(sock.fd, &read_fds);
       FD_SET(sock.fd, &write_fds);
@@ -1041,6 +1396,119 @@ void WiiSockMan::Update()
     }
   }
   UpdatePollCommands();
+}
+
+void WiiSockMan::UpdateVirtual()
+{
+  for (auto it = WiiSockets.begin(); it != WiiSockets.end();)
+  {
+    WiiSocket& sock = it->second;
+    if (!sock.IsValid())
+    {
+      it = WiiSockets.erase(it);
+      continue;
+    }
+    ++it;
+  }
+
+  for (auto& [wii_fd, sock] : WiiSockets)
+  {
+    bool readable = false;
+    bool writable = false;
+    bool exceptional = false;
+    if (sock.IsVirtual())
+      VirtualNet::GetReadiness(sock.m_vsock, &readable, &writable, &exceptional);
+    sock.Update(readable, writable, exceptional);
+  }
+
+  UpdateVirtualPollCommands();
+}
+
+void WiiSockMan::UpdateVirtualPollCommands()
+{
+  if (pending_polls.empty())
+    return;
+
+  const auto now = std::chrono::high_resolution_clock::now();
+  const auto elapsed =
+      std::chrono::duration_cast<std::chrono::milliseconds>(now - last_time).count();
+  last_time = now;
+
+  for (PollCommand& pcmd : pending_polls)
+  {
+    // A negative timeout means wait forever, so it is left alone.
+    if (pcmd.timeout > 0)
+      pcmd.timeout = std::max<s64>(0, pcmd.timeout - elapsed);
+  }
+
+  auto& system = m_ios.GetSystem();
+  auto& memory = system.GetMemory();
+
+  std::erase_if(pending_polls, [&system, &memory, this](PollCommand& pcmd) {
+    const auto request = Request(system, pcmd.request_addr);
+    int ready = 0;
+
+    // Wii event bits, as ConvertEvents maps them. Readiness is matched against
+    // every bit that means "can read" or "can write" rather than the normal
+    // one alone: a caller asking only for out-of-band or priority data would
+    // otherwise never be told the socket was ready, and wait forever.
+    constexpr s32 WII_POLLRDNORM = 0x0001;
+    constexpr s32 WII_POLLRDBAND = 0x0002;
+    constexpr s32 WII_POLLPRI = 0x0004;
+    constexpr s32 WII_POLLWRNORM = 0x0008;
+    constexpr s32 WII_POLLWRBAND = 0x0010;
+    constexpr s32 WII_POLLERR = 0x0020;
+    constexpr s32 WII_POLLNVAL = 0x0080;
+
+    constexpr s32 WII_READABLE = WII_POLLRDNORM | WII_POLLRDBAND | WII_POLLPRI;
+    constexpr s32 WII_WRITABLE = WII_POLLWRNORM | WII_POLLWRBAND;
+
+    for (u32 i = 0; i < pcmd.wii_fds.size(); ++i)
+    {
+      const s32 wii_fd = memory.Read_U32(pcmd.buffer_out + 0xc * i);
+      const s32 wanted = memory.Read_U32(pcmd.buffer_out + 0xc * i + 4);
+
+      s32 revents = 0;
+      const VirtualNet::SocketPtr socket = GetVirtualSocket(wii_fd);
+      if (!socket)
+      {
+        revents = WII_POLLNVAL;
+      }
+      else
+      {
+        bool readable = false;
+        bool writable = false;
+        bool exceptional = false;
+        VirtualNet::GetReadiness(socket, &readable, &writable, &exceptional);
+
+        // Readiness the caller did not ask about is not reported, but the
+        // error conditions are always allowed through - that is what makes a
+        // poll on a dead socket return instead of hanging.
+        if (readable && (wanted & WII_READABLE))
+          revents |= (wanted & WII_READABLE);
+        if (writable && (wanted & WII_WRITABLE))
+          revents |= (wanted & WII_WRITABLE);
+        if (exceptional)
+          revents |= WII_POLLERR;
+      }
+
+      memory.Write_U32(revents, pcmd.buffer_out + 0xc * i + 8);
+      if (revents != 0)
+        ++ready;
+
+      if (revents != 0)
+      {
+        VNET_TRACE(Stack, "poll: descriptor {} wanted {:#06x}, reporting {:#06x}", wii_fd, wanted,
+                   revents);
+      }
+    }
+
+    if (ready == 0 && pcmd.timeout)
+      return false;
+
+    EnqueueIPCReply(request, ready);
+    return true;
+  });
 }
 
 void WiiSockMan::UpdatePollCommands()

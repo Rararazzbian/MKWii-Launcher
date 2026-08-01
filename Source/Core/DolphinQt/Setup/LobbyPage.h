@@ -5,12 +5,10 @@
 
 #include <QWizardPage>
 
-class QComboBox;
-class QLineEdit;
-class QRadioButton;
+class LobbyConfigWidget;
 
-// Step 1: who you are in the lobby, whether you host it, and which microphone
-// you speak into.
+// Step 1: who you are in the lobby, whether you host it, which microphone you
+// speak into, and how the connection is made.
 class LobbyPage final : public QWizardPage
 {
   Q_OBJECT
@@ -23,8 +21,5 @@ public:
   bool validatePage() override;
 
 private:
-  QLineEdit* m_nickname;
-  QRadioButton* m_host;
-  QRadioButton* m_client;
-  QComboBox* m_microphone;
+  LobbyConfigWidget* m_config;
 };

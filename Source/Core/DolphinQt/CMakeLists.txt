@@ -386,6 +386,8 @@ add_executable(dolphin-emu
   Settings/TriforcePane.h
   Settings/USBDevicePicker.cpp
   Settings/USBDevicePicker.h
+  Lobby/LobbyConfigWidget.cpp
+  Lobby/LobbyConfigWidget.h
   Lobby/LobbyScreen.cpp
   Lobby/LobbyScreen.h
   Settings/WiiPane.cpp

@@ -456,6 +456,11 @@ const Info<std::string> MAIN_LOBBY_NICKNAME{{System::Main, "MKWiiLauncher", "Nic
 const Info<bool> MAIN_LOBBY_IS_HOST{{System::Main, "MKWiiLauncher", "IsHost"}, true};
 const Info<std::string> MAIN_LOBBY_MICROPHONE{{System::Main, "MKWiiLauncher", "Microphone"}, ""};
 const Info<std::string> MAIN_MKW_GAME_PATH{{System::Main, "MKWiiLauncher", "GamePath"}, ""};
+const Info<int> MAIN_LOBBY_PORT{{System::Main, "MKWiiLauncher", "LobbyPort"}, 7788};
+const Info<std::string> MAIN_LOBBY_HOST_ADDRESS{{System::Main, "MKWiiLauncher", "LobbyHost"}, ""};
+const Info<bool> MAIN_LOBBY_NET_TRACE{{System::Main, "MKWiiLauncher", "NetTrace"}, true};
+const Info<bool> MAIN_LOBBY_NET_TRACE_PAYLOADS{
+    {System::Main, "MKWiiLauncher", "NetTracePayloads"}, true};
 
 const Info<std::string> MAIN_ANALYTICS_ID{{System::Main, "Analytics", "ID"}, ""};
 const Info<bool> MAIN_ANALYTICS_ENABLED{{System::Main, "Analytics", "Enabled"}, false};

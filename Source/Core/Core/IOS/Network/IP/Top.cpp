@@ -30,6 +30,8 @@
 #include "Core/IOS/Network/ICMP.h"
 #include "Core/IOS/Network/MACUtils.h"
 #include "Core/IOS/Network/Socket.h"
+#include "Core/Lobby/NetTrace.h"
+#include "Core/Lobby/VirtualNet.h"
 #include "Core/System.h"
 #include "Core/WC24PatchEngine.h"
 
@@ -636,12 +638,16 @@ IPCReply NetIPTopDevice::HandleListenRequest(const IOCtlRequest& request)
   auto& system = GetSystem();
   auto& memory = system.GetMemory();
 
-  u32 fd = memory.Read_U32(request.buffer_in);
-  u32 BACKLOG = memory.Read_U32(request.buffer_in + 0x04);
+  const u32 fd = memory.Read_U32(request.buffer_in);
+  const u32 backlog = memory.Read_U32(request.buffer_in + 0x04);
   auto socket_manager = GetEmulationKernel().GetSocketManager();
-  u32 ret = listen(socket_manager->GetHostSocket(fd), BACKLOG);
 
   request.Log(GetDeviceName(), Common::Log::LogType::IOS_WC24);
+
+  if (auto virtual_socket = socket_manager->GetVirtualSocket(fd))
+    return IPCReply(VirtualNet::Listen(virtual_socket, backlog));
+
+  const u32 ret = listen(socket_manager->GetHostSocket(fd), backlog);
   return IPCReply(socket_manager->GetNetErrorCode(ret, "SO_LISTEN", false));
 }
 
@@ -664,6 +670,19 @@ IPCReply NetIPTopDevice::HandleGetSockOptRequest(const IOCtlRequest& request)
   u32 optlen = 4;
 
   auto socket_manager = GetEmulationKernel().GetSocketManager();
+
+  if (auto virtual_socket = socket_manager->GetVirtualSocket(fd))
+  {
+    // The virtual stack is asked with the Wii's own level and option numbers
+    // rather than the translated ones: it answers SO_TYPE and SO_ERROR from
+    // real state and remembers the rest, so there is nothing to translate to.
+    optlen = sizeof(optval);
+    const s32 result = VirtualNet::GetSockOpt(virtual_socket, level, optname, optval, &optlen);
+    memory.Write_U32(optlen, request.buffer_out + 0xC);
+    memory.CopyToEmu(request.buffer_out + 0x10, optval, optlen);
+    return IPCReply(result);
+  }
+
   int ret = getsockopt(socket_manager->GetHostSocket(fd), nat_level, nat_optname, (char*)&optval,
                        (socklen_t*)&optlen);
   const s32 return_value = socket_manager->GetNetErrorCode(ret, "SO_GETSOCKOPT", false);
@@ -706,6 +725,11 @@ IPCReply NetIPTopDevice::HandleSetSockOptRequest(const IOCtlRequest& request)
                optval[10], optval[11], optval[12], optval[13], optval[14], optval[15], optval[16],
                optval[17], optval[18], optval[19]);
 
+  auto socket_manager = GetEmulationKernel().GetSocketManager();
+
+  if (auto virtual_socket = socket_manager->GetVirtualSocket(fd))
+    return IPCReply(VirtualNet::SetSockOpt(virtual_socket, level, optname, optval, optlen));
+
   // TODO: bug booto about this, 0x2005 most likely timeout related, default value on Wii is ,
   // 0x2001 is most likely tcpnodelay
   if (level == 6 && (optname == 0x2005 || optname == 0x2001))
@@ -714,8 +738,6 @@ IPCReply NetIPTopDevice::HandleSetSockOptRequest(const IOCtlRequest& request)
   // Do the level/optname translation
   const int nat_level = MapWiiSockOptLevelToNative(level);
   const int nat_optname = MapWiiSockOptNameToNative(optname);
-
-  auto socket_manager = GetEmulationKernel().GetSocketManager();
   const int ret = setsockopt(socket_manager->GetHostSocket(fd), nat_level, nat_optname,
                              reinterpret_cast<char*>(optval), optlen);
   return IPCReply(socket_manager->GetNetErrorCode(ret, "SO_SETSOCKOPT", false));
@@ -726,14 +748,30 @@ IPCReply NetIPTopDevice::HandleGetSockNameRequest(const IOCtlRequest& request)
   auto& system = GetSystem();
   auto& memory = system.GetMemory();
 
-  u32 fd = memory.Read_U32(request.buffer_in);
+  const u32 fd = memory.Read_U32(request.buffer_in);
 
   request.Log(GetDeviceName(), Common::Log::LogType::IOS_WC24);
 
+  auto socket_manager = GetEmulationKernel().GetSocketManager();
+
   sockaddr sa{};
   socklen_t sa_len = sizeof(sa);
-  const int ret =
-      getsockname(GetEmulationKernel().GetSocketManager()->GetHostSocket(fd), &sa, &sa_len);
+  int ret;
+
+  if (auto virtual_socket = socket_manager->GetVirtualSocket(fd))
+  {
+    u32 ip = 0;
+    u16 port = 0;
+    ret = VirtualNet::GetSockName(virtual_socket, &ip, &port);
+    auto* const in = reinterpret_cast<sockaddr_in*>(&sa);
+    in->sin_family = AF_INET;
+    in->sin_port = htons(port);
+    in->sin_addr.s_addr = htonl(ip);
+  }
+  else
+  {
+    ret = getsockname(socket_manager->GetHostSocket(fd), &sa, &sa_len);
+  }
 
   if (request.buffer_out_size < 2 + sizeof(sa.sa_data))
     WARN_LOG_FMT(IOS_NET, "IOCTL_SO_GETSOCKNAME output buffer is too small. Truncating");
@@ -756,12 +794,28 @@ IPCReply NetIPTopDevice::HandleGetPeerNameRequest(const IOCtlRequest& request)
   auto& system = GetSystem();
   auto& memory = system.GetMemory();
 
-  u32 fd = memory.Read_U32(request.buffer_in);
+  const u32 fd = memory.Read_U32(request.buffer_in);
+
+  auto socket_manager = GetEmulationKernel().GetSocketManager();
 
   sockaddr sa{};
   socklen_t sa_len = sizeof(sa);
-  const int ret =
-      getpeername(GetEmulationKernel().GetSocketManager()->GetHostSocket(fd), &sa, &sa_len);
+  int ret;
+
+  if (auto virtual_socket = socket_manager->GetVirtualSocket(fd))
+  {
+    u32 ip = 0;
+    u16 port = 0;
+    ret = VirtualNet::GetPeerName(virtual_socket, &ip, &port);
+    auto* const in = reinterpret_cast<sockaddr_in*>(&sa);
+    in->sin_family = AF_INET;
+    in->sin_port = htons(port);
+    in->sin_addr.s_addr = htonl(ip);
+  }
+  else
+  {
+    ret = getpeername(socket_manager->GetHostSocket(fd), &sa, &sa_len);
+  }
 
   if (request.buffer_out_size < 2 + sizeof(sa.sa_data))
     WARN_LOG_FMT(IOS_NET, "IOCTL_SO_GETPEERNAME output buffer is too small. Truncating");
@@ -782,6 +836,17 @@ IPCReply NetIPTopDevice::HandleGetPeerNameRequest(const IOCtlRequest& request)
 
 IPCReply NetIPTopDevice::HandleGetHostIDRequest(const IOCtlRequest& request)
 {
+  // The single most important answer on an isolated subnet. Software that
+  // discovers peers by broadcasting filters itself out by comparing the source
+  // address of what arrives against this value; if it named a host adapter
+  // instead, the console would never recognise its own traffic.
+  if (VirtualNet::IsActive())
+  {
+    const u32 host_ip = VirtualNet::LocalIP();
+    VNET_TRACE(Iface, "SO_GETHOSTID = {}", Lobby::Trace::FormatIP(host_ip));
+    return IPCReply(host_ip);
+  }
+
   const DefaultInterface net_interface = GetSystemDefaultInterfaceOrFallback();
   const u32 host_ip = ntohl(net_interface.inet.s_addr);
   INFO_LOG_FMT(IOS_NET, "IOCTL_SO_GETHOSTID = {}.{}.{}.{}", host_ip >> 24, (host_ip >> 16) & 0xFF,
@@ -795,6 +860,24 @@ IPCReply NetIPTopDevice::HandleInetAToNRequest(const IOCtlRequest& request)
   auto& memory = system.GetMemory();
 
   const std::string hostname = memory.GetString(request.buffer_in);
+
+  if (VirtualNet::IsActive())
+  {
+    // A dotted quad still resolves - that is arithmetic, not a lookup - but a
+    // name has nowhere to be looked up. There is no resolver on this subnet,
+    // and going to the host's would be exactly the leak this exists to stop.
+    const std::optional<u32> literal = inet_pton(hostname.c_str());
+    if (!literal)
+    {
+      VNET_TRACE(Iface, "SO_INETATON(\"{}\") refused: no resolver on an isolated subnet",
+                 hostname);
+      return IPCReply(0);
+    }
+    memory.CopyToEmu(request.buffer_out, &*literal, sizeof(u32));
+    VNET_TRACE(Iface, "SO_INETATON(\"{}\") resolved as a literal", hostname);
+    return IPCReply(1);
+  }
+
   hostent* remoteHost = gethostbyname(hostname.c_str());
 
   if (remoteHost == nullptr || remoteHost->h_addr_list == nullptr ||
@@ -915,6 +998,14 @@ IPCReply NetIPTopDevice::HandleGetHostByNameRequest(const IOCtlRequest& request)
   auto& memory = system.GetMemory();
 
   const std::string hostname = memory.GetString(request.buffer_in);
+
+  if (VirtualNet::IsActive())
+  {
+    VNET_TRACE(Iface, "SO_GETHOSTBYNAME(\"{}\") refused: no resolver on an isolated subnet",
+               hostname);
+    return IPCReply(-1);
+  }
+
   hostent* remoteHost = gethostbyname(hostname.c_str());
 
   INFO_LOG_FMT(IOS_NET,
@@ -1034,6 +1125,20 @@ IPCReply NetIPTopDevice::HandleGetInterfaceOptRequest(const IOCtlVRequest& reque
     const u32 default_main_dns_resolver = ntohl(::inet_addr("8.8.8.8"));
     const u32 default_backup_dns_resolver = ntohl(::inet_addr("8.8.4.4"));
     u32 address = 0;
+
+    if (VirtualNet::IsActive())
+    {
+      // Enumerating the host's adapters for their resolvers is precisely what
+      // this must not do. The lobby host is named instead: nothing answers
+      // there, so a lookup fails rather than quietly escaping the subnet, and
+      // the console still sees a well-formed configuration.
+      const u32 gateway = VirtualNet::Gateway();
+      memory.Write_U32(gateway, request.io_vectors[0].address);
+      memory.Write_U32(gateway, request.io_vectors[0].address + 4);
+      VNET_TRACE(Iface, "DNS servers reported as {} (nothing answers there, by design)",
+                 Lobby::Trace::FormatIP(gateway));
+      break;
+    }
 #ifdef _WIN32
     if (!Core::WantsDeterminism())
     {
@@ -1155,6 +1260,16 @@ IPCReply NetIPTopDevice::HandleGetInterfaceOptRequest(const IOCtlVRequest& reque
     // XXX: this isn't exactly right; the buffer can be larger than 12 bytes,
     // in which case, depending on some interface settings, SO can write 12 more bytes
     memory.Write_U32(0xC, request.io_vectors[1].address);
+
+    if (VirtualNet::IsActive())
+    {
+      memory.Write_U32(VirtualNet::LocalIP(), request.io_vectors[0].address);
+      memory.Write_U32(VirtualNet::Netmask(), request.io_vectors[0].address + 4);
+      memory.Write_U32(VirtualNet::BroadcastIP(), request.io_vectors[0].address + 8);
+      VNET_TRACE(Iface, "address table: {}", VirtualNet::DescribeInterface());
+      break;
+    }
+
     const DefaultInterface net_interface = GetSystemDefaultInterfaceOrFallback();
     memory.Write_U32(ntohl(net_interface.inet.s_addr), request.io_vectors[0].address);
     memory.Write_U32(ntohl(net_interface.netmask.s_addr), request.io_vectors[0].address + 4);
@@ -1170,6 +1285,23 @@ IPCReply NetIPTopDevice::HandleGetInterfaceOptRequest(const IOCtlVRequest& reque
 
   case 0x4006:  // get routing table
   {
+    if (VirtualNet::IsActive())
+    {
+      // One default route, through the lobby host. Nothing is forwarded over
+      // it - there is nowhere for it to go - but the console expects a default
+      // route to exist before it will use the interface at all.
+      memory.Write_U32(0, request.io_vectors[0].address + param5);
+      memory.Write_U32(0, request.io_vectors[0].address + param5 + 4);
+      memory.Write_U32(VirtualNet::Gateway(), request.io_vectors[0].address + param5 + 8);
+      memory.Write_U32(1, request.io_vectors[0].address + param5 + 12);
+      memory.Write_U64(0, request.io_vectors[0].address + param5 + 16);
+      param5 += 24;
+      memory.Write_U32(param5, request.io_vectors[1].address);
+      VNET_TRACE(Iface, "routing table: default via {}",
+                 Lobby::Trace::FormatIP(VirtualNet::Gateway()));
+      break;
+    }
+
     const DefaultInterface net_interface = GetSystemDefaultInterfaceOrFallback();
     for (InterfaceRouting route : net_interface.routing_table)
     {
@@ -1236,6 +1368,42 @@ std::optional<IPCReply> NetIPTopDevice::HandleRecvFromRequest(const IOCtlVReques
   return std::nullopt;
 }
 
+// getaddrinfo for an isolated subnet. A dotted quad is turned into the single
+// result it describes; a name has nowhere to be resolved and fails, rather than
+// being sent to the host's resolver.
+static s32 VirtualAddressInfo(Memory::MemoryManager& memory, const IOCtlVRequest& request,
+                              const std::string& node, const std::string& service)
+{
+  const std::optional<u32> literal = node.empty() ? std::nullopt : inet_pton(node.c_str());
+  if (!literal)
+  {
+    VNET_TRACE(Iface, "SO_GETADDRINFO(\"{}\") refused: no resolver on an isolated subnet", node);
+    return SO_ERROR_HOST_NOT_FOUND;
+  }
+
+  const u16 port = service.empty() ? 0 : static_cast<u16>(std::strtoul(service.c_str(), nullptr, 10));
+
+  const u32 addr = request.io_vectors[0].address;
+  const u32 sockoffset = addr + 0x460;
+
+  memory.Write_U32(0, addr + 0x00);          // ai_flags
+  memory.Write_U32(AF_INET, addr + 0x04);    // ai_family
+  memory.Write_U32(0, addr + 0x08);          // ai_socktype: unspecified
+  memory.Write_U32(0, addr + 0x0C);          // ai_protocol
+  memory.Write_U32(8, addr + 0x10);          // ai_addrlen
+  memory.Write_U32(0, addr + 0x14);          // ai_canonname
+  memory.Write_U32(sockoffset, addr + 0x18); // ai_addr
+  memory.Write_U32(0, addr + 0x1C);          // ai_next: the only result
+
+  memory.Write_U8(8, sockoffset);            // sockaddr length
+  memory.Write_U8(AF_INET, sockoffset + 1);  // family
+  memory.Write_U16(port, sockoffset + 2);
+  memory.CopyToEmu(sockoffset + 4, &*literal, sizeof(u32));
+
+  VNET_TRACE(Iface, "SO_GETADDRINFO(\"{}\", \"{}\") resolved as a literal", node, service);
+  return 0;
+}
+
 IPCReply NetIPTopDevice::HandleGetAddressInfoRequest(const IOCtlVRequest& request)
 {
   auto& system = GetSystem();
@@ -1278,6 +1446,9 @@ IPCReply NetIPTopDevice::HandleGetAddressInfoRequest(const IOCtlVRequest& reques
     serviceNameStr = memory.GetString(request.in_vectors[1].address, request.in_vectors[1].size);
     pServiceName = serviceNameStr.c_str();
   }
+
+  if (VirtualNet::IsActive())
+    return IPCReply(VirtualAddressInfo(memory, request, nodeNameStr, serviceNameStr));
 
   addrinfo* result = nullptr;
   int ret = getaddrinfo(pNodeName, pServiceName, hints_valid ? &hints : nullptr, &result);
@@ -1394,6 +1565,27 @@ IPCReply NetIPTopDevice::HandleICMPPingRequest(const IOCtlVRequest& request)
   }
 
   auto socket_manager = GetEmulationKernel().GetSocketManager();
+
+  if (VirtualNet::IsActive())
+  {
+    // The peer's stack answers this; nothing goes through a host raw socket,
+    // which the host would need administrator rights to open anyway.
+    //
+    // ip_info.ip is already in host byte order - Read_U32 swapped it out of the
+    // console's big-endian memory - so it is passed through unchanged. The
+    // sockaddr above needs the other order, which is why it swaps.
+    //
+    // The wait is capped because this blocks the emulated CPU, and the console
+    // is free to ask for a timeout far longer than a frame.
+    constexpr u32 MAX_PING_WAIT_MS = 3000;
+    const s32 result = VirtualNet::Ping(ip_info.ip, ip_info.icmp_id, data, icmp_length,
+                                        std::min<u32>(static_cast<u32>(timeout), MAX_PING_WAIT_MS));
+    VNET_TRACE(Iface, "SO_ICMPPING {} = {}", Lobby::Trace::FormatIP(ip_info.ip), result);
+    // Upstream reports success regardless; matching that keeps callers that do
+    // not check from behaving differently on a virtual subnet.
+    return IPCReply(0);
+  }
+
   int ret = icmp_echo_req(socket_manager->GetHostSocket(fd), &addr, data, icmp_length);
   if (ret == icmp_length)
   {

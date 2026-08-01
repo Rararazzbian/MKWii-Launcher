@@ -108,6 +108,9 @@
 #include "DolphinQt/NetPlay/NetPlaySetupDialog.h"
 #include "DolphinQt/QtUtils/DolphinFileDialog.h"
 #include "DolphinQt/QtUtils/FileOpenEventFilter.h"
+#include "Core/Lobby/LobbyNet.h"
+#include "Core/Lobby/VirtualNet.h"
+
 #include "DolphinQt/Lobby/LobbyScreen.h"
 #include "DolphinQt/QtUtils/ModalMessageBox.h"
 #include "DolphinQt/QtUtils/ParallelProgressDialog.h"
@@ -896,6 +899,24 @@ void MainWindow::Play(const std::optional<std::string>& savestate_path)
         File::GetUserPath(D_WIISDCARDSYNCFOLDER_IDX) + "apps/brainslug/boot.dol");
     if (!selection && QFile::exists(brainslug))
     {
+      // Refuse rather than boot into a lobby that cannot work: joining without
+      // a host address would leave the Wii broadcasting into nothing.
+      if (!m_lobby_screen->IsReadyToPlay())
+      {
+        ModalMessageBox::warning(
+            this, tr("Lobby not configured"),
+            tr("Enter a nickname, and the host's address if you are joining a lobby."));
+        return;
+      }
+      m_lobby_screen->Save();
+      // Flushed to disk here rather than only at exit: booting a game is the
+      // most likely moment to lose the process, and losing the host address
+      // would mean retyping it every time.
+      Config::Save();
+
+      // The lobby itself is brought up by StartGame, so that every way of
+      // booting a game joins it and not just this button.
+
       // Booting a DOL inserts no disc of its own; Boot.cpp's SetDefaultDisc()
       // supplies one from the default ISO setting, and that is the only reason
       // Brainslug finds a game at all. Kept in step here rather than trusting
@@ -949,6 +970,12 @@ void MainWindow::TogglePause()
 
 void MainWindow::OnStopComplete()
 {
+  // Torn down with the console, so the lobby port is not held open while
+  // sitting on the launcher screen. The stack goes first: it detaches its
+  // handler, so no frame can arrive while the transport is being taken apart.
+  IOS::HLE::VirtualNet::Shutdown();
+  Lobby::Stop();
+
   m_stop_requested = false;
   HideRenderWidget(!m_exit_requested, m_exit_requested);
 #ifdef USE_DISCORD_PRESENCE
@@ -1193,6 +1220,74 @@ void MainWindow::StartGame(const std::vector<std::string>& paths,
       paths, boot_session_data ? std::move(*boot_session_data) : BootSessionData()));
 }
 
+bool MainWindow::StartLobbyForBoot(const BootParameters& parameters)
+{
+  // System titles are not what a lobby is for. The setup wizard finishes by
+  // booting the Mii Channel, and a client would sit there waiting on a host
+  // that nobody started; the System Menu and the GameCube IPL are the same
+  // story. Everything else - a disc, a WAD, and the DOL that Play and drag and
+  // drop both boot - is a game, and joins.
+  if (std::holds_alternative<BootParameters::NANDTitle>(parameters.parameters) ||
+      std::holds_alternative<BootParameters::IPL>(parameters.parameters))
+  {
+    return true;
+  }
+
+  // Already up, because a boot was queued behind a game that was still
+  // stopping and this is the second time through.
+  if (Lobby::IsActive())
+  {
+    IOS::HLE::VirtualNet::Initialize();
+    return true;
+  }
+
+  const bool is_host = Config::Get(Config::MAIN_LOBBY_IS_HOST);
+  const std::string host_address = Config::Get(Config::MAIN_LOBBY_HOST_ADDRESS);
+
+  // Refuse rather than boot into a lobby that cannot work: joining without a
+  // host address would leave the console broadcasting into nothing.
+  if (!is_host && host_address.empty())
+  {
+    ModalMessageBox::warning(
+        this, tr("Lobby not configured"),
+        tr("This build is set to join a lobby, but no host address is set.\n\nSet one on the "
+           "launcher screen, or switch to hosting."));
+    return false;
+  }
+
+  // Brought up before boot so the console's very first GETHOSTID already
+  // returns a virtual address rather than a real adapter's.
+  if (!Lobby::Start(is_host ? Lobby::Role::Host : Lobby::Role::Client, host_address,
+                    static_cast<u16>(Config::Get(Config::MAIN_LOBBY_PORT)),
+                    Config::Get(Config::MAIN_LOBBY_NICKNAME)))
+  {
+    ModalMessageBox::critical(this, tr("Lobby failed"),
+                              QString::fromStdString(Lobby::GetStatusText()));
+    return false;
+  }
+
+  // A client has no address until the host gives it one, and the console asks
+  // for its address within milliseconds of booting. Wait for the handshake
+  // rather than letting it start with a placeholder.
+  if (!is_host && !Lobby::WaitForAddress(8000))
+  {
+    const std::string reason = Lobby::GetStatusText();
+    IOS::HLE::VirtualNet::Shutdown();
+    Lobby::Stop();
+    ModalMessageBox::critical(
+        this, tr("Could not join lobby"),
+        tr("No reply from the host.\n\n%1").arg(QString::fromStdString(reason)));
+    return false;
+  }
+
+  // Both roles have an address by this point - the host from the moment it
+  // started listening, a client from the handshake above - so the virtual
+  // network can describe an interface. It has to be up before the console opens
+  // its first socket, which happens moments after boot.
+  IOS::HLE::VirtualNet::Initialize();
+  return true;
+}
+
 void MainWindow::StartGame(std::unique_ptr<BootParameters>&& parameters)
 {
 
@@ -1241,6 +1336,14 @@ void MainWindow::StartGame(std::unique_ptr<BootParameters>&& parameters)
     m_pending_boot = std::move(parameters);
     return;
   }
+
+  // Every route to a running game passes through here - the Play button, drag
+  // and drop, File > Open, recent files, the command line - so this is where
+  // the lobby is brought up. Doing it in Play() alone meant dropping a DOL on
+  // the window booted it with the console still on a host adapter, silently
+  // ignoring whether the launcher was set to host or to join.
+  if (!StartLobbyForBoot(*parameters))
+    return;
 
   // We need the render widget before booting.
   ShowRenderWidget();

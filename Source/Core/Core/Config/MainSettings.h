@@ -279,6 +279,19 @@ extern const Info<bool> MAIN_LOBBY_IS_HOST;
 extern const Info<std::string> MAIN_LOBBY_MICROPHONE;
 // Path to the RMCE01 disc image the launcher boots.
 extern const Info<std::string> MAIN_MKW_GAME_PATH;
+// TCP port the lobby host listens on. Not the Wii's port: the emulated console
+// always sees 27900, this is the tunnel the datagrams travel over.
+extern const Info<int> MAIN_LOBBY_PORT;
+// "host:port" of the lobby to join. Only meaningful when not hosting.
+extern const Info<std::string> MAIN_LOBBY_HOST_ADDRESS;
+// Tracing for the virtual Wii network, written to User\Logs\VirtualNet.log.
+// On by default: a fault that only appears with two consoles talking to each
+// other is not something anyone can reproduce on demand, so the trace has to
+// already be there when it happens.
+extern const Info<bool> MAIN_LOBBY_NET_TRACE;
+// Hex dumps of every payload. The bulk of the trace, and the first thing worth
+// turning off if it is costing frames.
+extern const Info<bool> MAIN_LOBBY_NET_TRACE_PAYLOADS;
 
 extern const Info<std::string> MAIN_ANALYTICS_ID;
 extern const Info<bool> MAIN_ANALYTICS_ENABLED;

@@ -32,6 +32,7 @@
 #include "Core/HW/AddressSpace.h"
 #include "Core/HW/Memmap.h"
 #include "Core/HW/WiiSave.h"
+#include "Core/Lobby/LobbyNet.h"
 #include "Core/IOS/ES/ES.h"
 #include "Core/IOS/FS/FileSystem.h"
 #include "Core/IOS/IOS.h"
@@ -66,6 +67,8 @@
 
 #include "UICommon/AutoUpdate.h"
 #include "UICommon/GameFile.h"
+
+#include "VideoCommon/OnScreenDisplay.h"
 
 #ifdef RC_CLIENT_SUPPORTS_RAINTEGRATION
 #include <rcheevos/include/rc_client_raintegration.h>
@@ -165,6 +168,11 @@ void MenuBar::OnEmulationStateChanged(Core::State state)
 
   UpdateStateSlotMenu();
   UpdateToolsMenu(state);
+
+  // Only a client has a host to dial, and only while a lobby is up - which is
+  // exactly the span between a game starting and stopping.
+  m_lobby_reconnect->setEnabled(Lobby::CanReconnect());
+  m_lobby_auto_reconnect->setEnabled(Lobby::CanReconnect());
 
   OnDebugModeToggled(Settings::Instance().IsDebugModeEnabled());
 }
@@ -276,6 +284,25 @@ void MenuBar::AddFileMenu()
 void MenuBar::AddToolsMenu()
 {
   QMenu* tools_menu = addMenu(tr("&Tools"));
+
+  // A dropped lobby link used to mean stopping the console and starting over,
+  // which loses the race. Reconnecting keeps the address the console's sockets
+  // are bound to, so the game carries on where it was.
+  m_lobby_reconnect = tools_menu->addAction(tr("&Reconnect to Lobby"), this, [this] {
+    if (!Lobby::Reconnect())
+      OSD::AddMessage("Nothing to reconnect to", OSD::Duration::NORMAL, OSD::Color::YELLOW);
+  });
+  m_lobby_reconnect->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_R));
+  // Reachable while the render widget has focus, which is where it is needed.
+  m_lobby_reconnect->setShortcutContext(Qt::ApplicationShortcut);
+
+  m_lobby_auto_reconnect = tools_menu->addAction(tr("Reconnect &Automatically"));
+  m_lobby_auto_reconnect->setCheckable(true);
+  m_lobby_auto_reconnect->setChecked(Lobby::GetAutoReconnect());
+  connect(m_lobby_auto_reconnect, &QAction::toggled, this,
+          [](bool enabled) { Lobby::SetAutoReconnect(enabled); });
+
+  tools_menu->addSeparator();
 
   tools_menu->addAction(tr("&Resource Pack Manager"), this,
                         [this] { emit ShowResourcePackManager(); });

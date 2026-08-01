@@ -165,6 +165,11 @@ private:
   void StartGame(const std::vector<std::string>& paths,
                  std::unique_ptr<BootSessionData> boot_session_data = nullptr);
   void StartGame(std::unique_ptr<BootParameters>&& parameters);
+  // Brings the lobby and the virtual network up for a boot that should join
+  // one, which is every boot except a system title. Returns false when the
+  // lobby was wanted but could not be established, in which case the boot is
+  // abandoned rather than started on a host adapter.
+  bool StartLobbyForBoot(const BootParameters& parameters);
   void ShowRenderWidget();
   void HideRenderWidget(bool reinit = true, bool is_exit = false);
 

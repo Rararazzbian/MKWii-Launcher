@@ -4,9 +4,14 @@
 #pragma once
 
 #ifdef _WIN32
-#include <iphlpapi.h>
+// Order matters and is not alphabetical: iphlpapi.h falls back to the original
+// winsock.h unless winsock2.h has already been seen, and the two define the
+// same types differently. It only ever worked because something else in every
+// translation unit happened to pull winsock2.h in first.
 #include <winsock2.h>
 #include <ws2tcpip.h>
+
+#include <iphlpapi.h>
 
 typedef pollfd pollfd_t;
 
@@ -47,6 +52,7 @@ typedef struct pollfd pollfd_t;
 #include "Core/IOS/IOS.h"
 #include "Core/IOS/Network/IP/Top.h"
 #include "Core/IOS/Network/SSL.h"
+#include "Core/Lobby/VirtualNet.h"
 
 namespace IOS::HLE
 {
@@ -200,11 +206,21 @@ private:
 
   friend class WiiSockMan;
   void SetFd(s32 s);
+  // Takes over a socket served by the virtual network instead of the host. The
+  // descriptor stays -1 for its whole life: there is deliberately nothing on
+  // the host to leak traffic through.
+  void SetVirtual(VirtualNet::SocketPtr socket);
   void SetWiiFd(s32 s);
   s32 Shutdown(u32 how);
   s32 CloseFd();
   s32 FCntl(u32 cmd, u32 arg);
   void Abort(sockop* op, s32 value) const;
+
+  bool IsVirtual() const { return m_vsock != nullptr; }
+  // Handles one pending operation against the virtual network. Split out
+  // because the host and virtual paths share none of their bodies, only the
+  // surrounding blocking-and-retry logic.
+  s32 UpdateVirtual(const sockop& op, bool& force_non_block);
 
   const Timeout& GetTimeout();
   void ResetTimeout();
@@ -214,11 +230,12 @@ private:
   void Update(bool read, bool write, bool except);
   void UpdateConnectingState(s32 connect_rv);
   ConnectingState GetConnectingState() const;
-  bool IsValid() const { return fd >= 0; }
+  bool IsValid() const { return fd >= 0 || m_vsock != nullptr; }
   bool IsTCP() const;
 
   WiiSockMan& m_socket_manager;
 
+  VirtualNet::SocketPtr m_vsock;
   s32 fd = -1;
   s32 wii_fd = -1;
   bool nonBlock = false;
@@ -265,6 +282,12 @@ public:
   // NON-BLOCKING FUNCTIONS
   s32 NewSocket(s32 af, s32 type, s32 protocol);
   s32 AddSocket(s32 fd, bool is_rw);
+  // Gives a virtual-network socket a Wii descriptor. Mirrors AddSocket for the
+  // isolated path; takes ownership of the handle.
+  s32 AddVirtualSocket(VirtualNet::SocketPtr socket, bool is_rw);
+  // Null unless this descriptor is served by the virtual network. Every place
+  // that would otherwise reach for a host descriptor asks this first.
+  VirtualNet::SocketPtr GetVirtualSocket(s32 wii_fd) const;
   bool IsSocketBlocking(s32 wii_fd) const;
   s32 GetHostSocket(s32 wii_fd) const;
   s32 ShutdownSocket(s32 wii_fd, u32 how);
@@ -293,6 +316,11 @@ public:
 
 private:
   void UpdatePollCommands();
+  // Poll and readiness against the virtual network. Kept apart from the host
+  // versions rather than interleaved: with a lobby up there are no host
+  // descriptors at all, so there is nothing for select() or poll() to be given.
+  void UpdateVirtual();
+  void UpdateVirtualPollCommands();
 
   friend class WiiSocket;
 

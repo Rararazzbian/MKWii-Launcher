@@ -14,6 +14,8 @@ add_dolphin_test(DSPAssemblyTest
 
 add_dolphin_test(ESFormatsTest IOS/ES/FormatsTest.cpp)
 
+add_dolphin_test(VirtualNetTest Lobby/VirtualNetTest.cpp Lobby/VirtualNetPeerTest.cpp)
+
 add_dolphin_test(FileSystemTest IOS/FS/FileSystemTest.cpp)
 
 add_dolphin_test(SkylandersTest IOS/USB/SkylandersTest.cpp)
