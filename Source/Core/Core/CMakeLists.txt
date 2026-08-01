@@ -436,6 +436,16 @@ add_library(core
   Lobby/NetTrace.h
   Lobby/VirtualNet.cpp
   Lobby/VirtualNet.h
+  Lobby/Voice/VoiceAudio.cpp
+  Lobby/Voice/VoiceAudio.h
+  Lobby/Voice/VoiceChat.cpp
+  Lobby/Voice/VoiceChat.h
+  Lobby/Voice/VoiceCodec.cpp
+  Lobby/Voice/VoiceCodec.h
+  Lobby/Voice/VoiceDsp.cpp
+  Lobby/Voice/VoiceDsp.h
+  Lobby/Voice/VoiceSettings.cpp
+  Lobby/Voice/VoiceSettings.h
   IOS/Network/SSL.cpp
   IOS/Network/SSL.h
   IOS/Network/WD/Command.cpp
@@ -708,6 +718,7 @@ PUBLIC
   expr
   inputcommon
   MbedTLS::mbedtls
+  Opus::opus
   pugixml
   sfml-network
   videonull

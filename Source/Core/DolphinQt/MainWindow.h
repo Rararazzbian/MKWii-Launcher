@@ -56,6 +56,7 @@ class ThreadWidget;
 class ToolBar;
 class WatchWidget;
 class WiiTASInputWindow;
+class VoiceChatWindow;
 class WiiSpeakWindow;
 class LogitechMicWindow;
 struct WindowSystemInfo;
@@ -186,6 +187,7 @@ private:
   void ShowFIFOPlayer();
   void ShowSkylanderPortal();
   void ShowInfinityBase();
+  void ShowVoiceChatWindow();
   void ShowWiiSpeakWindow();
   void ShowLogitechMicWindow();
   void ShowMemcardManager();
@@ -267,6 +269,7 @@ private:
   std::unique_ptr<FIFOPlayerWindow> m_fifo_window = nullptr;
   SkylanderPortalWindow* m_skylander_window = nullptr;
   InfinityBaseWindow* m_infinity_window = nullptr;
+  VoiceChatWindow* m_voice_chat_window = nullptr;
   WiiSpeakWindow* m_wii_speak_window = nullptr;
   LogitechMicWindow* m_logitech_mic_window = nullptr;
   MappingWindow* m_hotkey_window = nullptr;

@@ -113,8 +113,10 @@
 #include "DolphinQt/QtUtils/FileOpenEventFilter.h"
 #include "Core/Lobby/LobbyNet.h"
 #include "Core/Lobby/VirtualNet.h"
+#include "Core/Lobby/Voice/VoiceChat.h"
 
 #include "DolphinQt/Lobby/LobbyScreen.h"
+#include "DolphinQt/Lobby/VoiceChatWindow.h"
 #include "DolphinQt/QtUtils/ModalMessageBox.h"
 #include "DolphinQt/QtUtils/ParallelProgressDialog.h"
 #include "DolphinQt/QtUtils/QueueOnObject.h"
@@ -726,6 +728,7 @@ void MainWindow::ConnectToolBar()
   connect(m_tool_bar, &ToolBar::ScreenShotPressed, this, &MainWindow::ScreenShot);
   connect(m_tool_bar, &ToolBar::SettingsPressed, this, &MainWindow::ShowSettingsWindow);
   connect(m_tool_bar, &ToolBar::ControllersPressed, this, &MainWindow::ShowControllersWindow);
+  connect(m_tool_bar, &ToolBar::VoiceChatPressed, this, &MainWindow::ShowVoiceChatWindow);
   connect(m_tool_bar, &ToolBar::GraphicsPressed, this, &MainWindow::ShowGraphicsWindow);
 
   connect(m_tool_bar, &ToolBar::StepPressed, m_code_widget, &CodeWidget::Step);
@@ -989,6 +992,7 @@ void MainWindow::OnStopComplete()
   // Torn down with the console, so the lobby port is not held open while
   // sitting on the launcher screen. The stack goes first: it detaches its
   // handler, so no frame can arrive while the transport is being taken apart.
+  Lobby::Voice::Stop();
   IOS::HLE::VirtualNet::Shutdown();
   Lobby::Stop();
 
@@ -1288,6 +1292,7 @@ bool MainWindow::StartLobbyForBoot(const BootParameters& parameters)
   if (!is_host && !Lobby::WaitForAddress(8000))
   {
     const std::string reason = Lobby::GetStatusText();
+    Lobby::Voice::Stop();
     IOS::HLE::VirtualNet::Shutdown();
     Lobby::Stop();
     ModalMessageBox::critical(
@@ -1301,6 +1306,10 @@ bool MainWindow::StartLobbyForBoot(const BootParameters& parameters)
   // network can describe an interface. It has to be up before the console opens
   // its first socket, which happens moments after boot.
   IOS::HLE::VirtualNet::Initialize();
+
+  // Voice rides the same link, but it is between Dolphin instances rather than
+  // between consoles, so it does not care whether the game has booted yet.
+  Lobby::Voice::Start();
   return true;
 }
 
@@ -1626,6 +1635,20 @@ void MainWindow::ShowInfinityBase()
   m_infinity_window->show();
   m_infinity_window->raise();
   m_infinity_window->activateWindow();
+}
+
+void MainWindow::ShowVoiceChatWindow()
+{
+  if (!m_voice_chat_window)
+  {
+    // Parented to the main window so it closes with it, but not modal: the
+    // point of the meters is watching them while something else has focus.
+    m_voice_chat_window = new VoiceChatWindow(this);
+  }
+
+  m_voice_chat_window->show();
+  m_voice_chat_window->raise();
+  m_voice_chat_window->activateWindow();
 }
 
 void MainWindow::ShowWiiSpeakWindow()

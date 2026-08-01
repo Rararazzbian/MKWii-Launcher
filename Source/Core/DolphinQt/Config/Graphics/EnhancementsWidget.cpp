@@ -3,6 +3,7 @@
 
 #include "DolphinQt/Config/Graphics/EnhancementsWidget.h"
 
+#include <algorithm>
 #include <utility>
 
 #include <QGridLayout>
@@ -426,6 +427,23 @@ void EnhancementsWidget::UpdateAntialiasingOptions()
       if (aa_mode > 1)
         m_antialiasing_combo->Add(tr("%1x SSAA").arg(aa_mode), aa_mode, true);
     }
+  }
+
+  // The list above is built from what the backend reports, and backend info is
+  // not always populated by the time this window is first shown - it is filled
+  // in when the backend selection changes. With an empty list a configured
+  // 2x MSAA matches no entry, so the box falls back to showing nothing at all,
+  // which reads as "anti-aliasing is off" when it is on and being applied.
+  //
+  // Adding the configured mode when it is missing makes the box show what is
+  // actually set, whatever the backend has got round to reporting.
+  const u32 configured = Config::Get(Config::GFX_MSAA);
+  const bool configured_ssaa = Config::Get(Config::GFX_SSAA);
+  if (configured > 1 && std::ranges::find(aa_modes, configured) == aa_modes.end())
+  {
+    m_antialiasing_combo->Add(
+        configured_ssaa ? tr("%1x SSAA").arg(configured) : tr("%1x MSAA").arg(configured),
+        configured, configured_ssaa);
   }
 
   m_antialiasing_combo->Refresh();

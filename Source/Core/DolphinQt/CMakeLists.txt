@@ -390,6 +390,8 @@ add_executable(dolphin-emu
   Lobby/LobbyConfigWidget.h
   Lobby/LobbyScreen.cpp
   Lobby/LobbyScreen.h
+  Lobby/VoiceChatWindow.cpp
+  Lobby/VoiceChatWindow.h
   Settings/WiiPane.cpp
   Settings/WiiPane.h
   Setup/DownloadsPage.cpp

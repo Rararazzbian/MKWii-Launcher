@@ -134,3 +134,6 @@
 	path = Externals/wil
 	url = https://github.com/microsoft/wil.git
 	shallow = true
+[submodule "Externals/opus/opus"]
+	path = Externals/opus/opus
+	url = https://github.com/xiph/opus.git

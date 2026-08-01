@@ -37,9 +37,50 @@ using Trace::FormatIP;
 
 // Control traffic and virtual network frames are separated so a burst of game
 // traffic cannot delay an address assignment or a roster update behind it.
+// Voice gets a third channel for the same reason in reverse: it is sent
+// unreliably, and must not be able to hold up anything that is not.
 constexpr u8 CHANNEL_CONTROL = 0;
 constexpr u8 CHANNEL_DATA = 1;
-constexpr std::size_t CHANNEL_COUNT = 2;
+constexpr u8 CHANNEL_VOICE = 2;
+constexpr std::size_t CHANNEL_COUNT = 3;
+
+// How a frame travels. Control and virtual network frames are reliable and
+// ordered, because the game's stack is built on the assumption that they are.
+//
+// Voice audio is neither. A retransmitted 20 ms frame arrives long after the
+// moment it belonged to, and holding later audio behind it to preserve order
+// turns one lost packet into an audible stall - which is worse than the gap it
+// was trying to fill, and worse than what the decoder can conceal on its own.
+enum class Wire
+{
+  Control,
+  Data,
+  VoiceAudio,
+  VoiceControl,
+};
+
+u8 WireChannel(Wire wire)
+{
+  switch (wire)
+  {
+  case Wire::Data:
+    return CHANNEL_DATA;
+  case Wire::VoiceAudio:
+    return CHANNEL_VOICE;
+  case Wire::Control:
+  case Wire::VoiceControl:
+  default:
+    return CHANNEL_CONTROL;
+  }
+}
+
+u32 WireFlags(Wire wire)
+{
+  // UNSEQUENCED as well as unreliable: without it ENet still refuses to deliver
+  // a packet older than one already seen, which for audio means silently
+  // dropping a frame that arrived late but is still perfectly usable.
+  return wire == Wire::VoiceAudio ? ENET_PACKET_FLAG_UNSEQUENCED : ENET_PACKET_FLAG_RELIABLE;
+}
 
 constexpr std::size_t MAX_CLIENTS = 15;  // .2 through .16; the range allows more
 
@@ -84,6 +125,11 @@ enum : u8
   TYPE_DATA = 4,
   // Host to client, refusing the join. Payload is the reason.
   TYPE_REJECT = 5,
+  // Anyone to anyone: an encoded voice frame. Unreliable. See Wire.
+  TYPE_VOICE = 6,
+  // Anyone to anyone: who this console is, what the host wants the bitrate to
+  // be, and whether this console is racing. Reliable, and rare.
+  TYPE_VOICE_CONTROL = 7,
 };
 
 const char* TypeName(u8 type)
@@ -100,6 +146,10 @@ const char* TypeName(u8 type)
     return "DATA";
   case TYPE_REJECT:
     return "REJECT";
+  case TYPE_VOICE:
+    return "VOICE";
+  case TYPE_VOICE_CONTROL:
+    return "VOICECTL";
   default:
     return "?";
   }
@@ -108,7 +158,7 @@ const char* TypeName(u8 type)
 struct Outgoing
 {
   u32 dst_ip;
-  bool is_control;
+  Wire wire;
   std::vector<u8> frame;
 };
 
@@ -148,6 +198,7 @@ struct State
 
   std::mutex handler_mutex;
   PayloadHandler handler;
+  VoiceHandler voice_handler;
 };
 
 State s_state;
@@ -194,19 +245,19 @@ std::vector<u8> BuildFrame(u8 type, u32 src_ip, u32 dst_ip, const void* data, st
 }
 
 // Lobby thread only.
-void SendRaw(ENetPeer* peer, const std::vector<u8>& frame, bool is_control)
+void SendRaw(ENetPeer* peer, const std::vector<u8>& frame, Wire wire)
 {
   if (!peer)
     return;
 
-  ENetPacket* packet = enet_packet_create(frame.data(), frame.size(), ENET_PACKET_FLAG_RELIABLE);
+  ENetPacket* packet = enet_packet_create(frame.data(), frame.size(), WireFlags(wire));
   if (!packet)
   {
     VNET_TRACE(Error, "enet_packet_create failed for a {} byte frame", frame.size());
     return;
   }
 
-  const u8 channel = is_control ? CHANNEL_CONTROL : CHANNEL_DATA;
+  const u8 channel = WireChannel(wire);
   if (enet_peer_send(peer, channel, packet) != 0)
   {
     VNET_TRACE(Error, "enet_peer_send failed on channel {} for a {} byte frame", channel,
@@ -216,15 +267,15 @@ void SendRaw(ENetPeer* peer, const std::vector<u8>& frame, bool is_control)
 }
 
 // Caller holds the mutex.
-void QueueLocked(u32 dst_ip, bool is_control, std::vector<u8> frame)
+void QueueLocked(u32 dst_ip, Wire wire, std::vector<u8> frame)
 {
-  s_state.outgoing.push_back(Outgoing{dst_ip, is_control, std::move(frame)});
+  s_state.outgoing.push_back(Outgoing{dst_ip, wire, std::move(frame)});
 }
 
-void Queue(u32 dst_ip, bool is_control, std::vector<u8> frame)
+void Queue(u32 dst_ip, Wire wire, std::vector<u8> frame)
 {
   std::lock_guard lock{s_state.mutex};
-  QueueLocked(dst_ip, is_control, std::move(frame));
+  QueueLocked(dst_ip, wire, std::move(frame));
 }
 
 void Deliver(u32 src_ip, u32 dst_ip, const u8* data, std::size_t length)
@@ -239,10 +290,18 @@ void Deliver(u32 src_ip, u32 dst_ip, const u8* data, std::size_t length)
   s_state.handler(src_ip, dst_ip, data, length);
 }
 
+void DeliverVoice(u32 src_ip, bool audio, const u8* data, std::size_t length)
+{
+  std::lock_guard lock{s_state.handler_mutex};
+  if (!s_state.voice_handler)
+    return;  // voice chat is not running on this console; not worth a trace line
+  s_state.voice_handler(src_ip, audio, data, length);
+}
+
 // Lobby thread only. Sends `frame` to the peer owning `dst_ip`, or to every
 // peer when it is the broadcast address. `except` is skipped, which is how a
 // forwarded broadcast avoids going back where it came from.
-void RouteToPeers(u32 dst_ip, bool is_control, const std::vector<u8>& frame, ENetPeer* except)
+void RouteToPeers(u32 dst_ip, Wire wire, const std::vector<u8>& frame, ENetPeer* except)
 {
   std::lock_guard lock{s_state.mutex};
 
@@ -255,7 +314,7 @@ void RouteToPeers(u32 dst_ip, bool is_control, const std::vector<u8>& frame, ENe
       VNET_TRACE(Route, "drop -> {}: not connected to the host", FormatIP(dst_ip));
       return;
     }
-    SendRaw(server, frame, is_control);
+    SendRaw(server, frame, wire);
     return;
   }
 
@@ -266,7 +325,7 @@ void RouteToPeers(u32 dst_ip, bool is_control, const std::vector<u8>& frame, ENe
     {
       if (peer == except)
         continue;
-      SendRaw(peer, frame, is_control);
+      SendRaw(peer, frame, wire);
       ++sent;
     }
     VNET_TRACE(Route, "broadcast fanned out to {} peer(s)", sent);
@@ -279,7 +338,7 @@ void RouteToPeers(u32 dst_ip, bool is_control, const std::vector<u8>& frame, ENe
     VNET_TRACE(Route, "drop -> {}: no peer holds that address", FormatIP(dst_ip));
     return;
   }
-  SendRaw(it->second, frame, is_control);
+  SendRaw(it->second, frame, wire);
 }
 
 // Host only, caller holds the mutex. Prefers `requested` so a client that comes
@@ -319,7 +378,7 @@ void BroadcastRoster()
     }
   }
 
-  Queue(BROADCAST_IP, true, BuildFrame(TYPE_ROSTER, HOST_IP, BROADCAST_IP, body.data(),
+  Queue(BROADCAST_IP, Wire::Control, BuildFrame(TYPE_ROSTER, HOST_IP, BROADCAST_IP, body.data(),
                                        body.size()));
   VNET_TRACE(Lobby, "roster broadcast, {} bytes", body.size());
 }
@@ -367,7 +426,7 @@ void SendHello()
 
   VNET_TRACE(Lobby, "hello as \"{}\", asking for {}", name,
              requested ? FormatIP(requested) : "any address");
-  Queue(HOST_IP, true, BuildFrame(TYPE_HELLO, requested, HOST_IP, body.data(), body.size()));
+  Queue(HOST_IP, Wire::Control, BuildFrame(TYPE_HELLO, requested, HOST_IP, body.data(), body.size()));
 }
 
 // Host side of a join.
@@ -417,13 +476,14 @@ void HandleHello(ENetPeer* from, const u8* data, std::size_t length)
   {
     const std::string reason = "The lobby is full";
     VNET_TRACE(Error, "refused {}: {}", name, reason);
-    SendRaw(from, BuildFrame(TYPE_REJECT, HOST_IP, 0, reason.data(), reason.size()), true);
+    SendRaw(from, BuildFrame(TYPE_REJECT, HOST_IP, 0, reason.data(), reason.size()),
+            Wire::Control);
     return;
   }
 
   VNET_TRACE(Lobby, "{} joined as {}{}", name, FormatIP(assigned),
              assigned == requested ? " (the address it asked for)" : "");
-  SendRaw(from, BuildFrame(TYPE_ASSIGN, HOST_IP, assigned, nullptr, 0), true);
+  SendRaw(from, BuildFrame(TYPE_ASSIGN, HOST_IP, assigned, nullptr, 0), Wire::Control);
   OSD::AddMessage(name + " connected", OSD::Duration::NORMAL, OSD::Color::GREEN);
 
   {
@@ -501,7 +561,8 @@ void HandleData(ENetPeer* from, const Header& header, const u8* payload, std::si
     if (dst_ip == BROADCAST_IP)
     {
       Deliver(src_ip, dst_ip, payload, length);
-      RouteToPeers(dst_ip, false, BuildFrame(TYPE_DATA, src_ip, dst_ip, payload, length), from);
+      RouteToPeers(dst_ip, Wire::Data, BuildFrame(TYPE_DATA, src_ip, dst_ip, payload, length),
+                   from);
       return;
     }
     if (dst_ip == HOST_IP)
@@ -511,7 +572,8 @@ void HandleData(ENetPeer* from, const Header& header, const u8* payload, std::si
     }
 
     VNET_TRACE(Route, "forwarding {} -> {}, {} bytes", FormatIP(src_ip), FormatIP(dst_ip), length);
-    RouteToPeers(dst_ip, false, BuildFrame(TYPE_DATA, src_ip, dst_ip, payload, length), from);
+    RouteToPeers(dst_ip, Wire::Data, BuildFrame(TYPE_DATA, src_ip, dst_ip, payload, length),
+                 from);
     return;
   }
 
@@ -523,6 +585,59 @@ void HandleData(ENetPeer* from, const Header& header, const u8* payload, std::si
     return;
   }
   Deliver(src_ip, dst_ip, payload, length);
+}
+
+// Voice takes the same star route as the virtual network - a client sends to
+// the host, the host fans out - but it is kept separate rather than folded into
+// HandleData, because a voice frame that arrives while the console is not on
+// the virtual network yet is still perfectly deliverable. Voice is between
+// Dolphin instances; the emulated console is not involved.
+void HandleVoice(ENetPeer* from, const Header& header, bool audio, const u8* payload,
+                 std::size_t length)
+{
+  u32 src_ip = Common::swap32(header.src_ip);
+  const u32 claimed_dst = Common::swap32(header.dst_ip);
+  const bool to_everyone = MeansEveryone(claimed_dst);
+  const u32 dst_ip = to_everyone ? BROADCAST_IP : claimed_dst;
+
+  if (s_state.role == Role::Host)
+  {
+    u32 peer_ip = 0;
+    {
+      std::lock_guard lock{s_state.mutex};
+      const auto it = s_state.peer_ips.find(from);
+      if (it != s_state.peer_ips.end())
+        peer_ip = it->second;
+    }
+    if (peer_ip == 0)
+      return;
+    // Same reasoning as HandleData: the connection is the authority on who sent
+    // this, not the frame. Per-peer volume is keyed off the source, so letting
+    // a frame claim someone else's address would let it borrow their volume.
+    src_ip = peer_ip;
+
+    const u8 type = audio ? TYPE_VOICE : TYPE_VOICE_CONTROL;
+    const Wire wire = audio ? Wire::VoiceAudio : Wire::VoiceControl;
+
+    if (dst_ip == BROADCAST_IP)
+    {
+      DeliverVoice(src_ip, audio, payload, length);
+      RouteToPeers(dst_ip, wire, BuildFrame(type, src_ip, dst_ip, payload, length), from);
+      return;
+    }
+    if (dst_ip == HOST_IP)
+    {
+      DeliverVoice(src_ip, audio, payload, length);
+      return;
+    }
+    RouteToPeers(dst_ip, wire, BuildFrame(type, src_ip, dst_ip, payload, length), from);
+    return;
+  }
+
+  const u32 local = s_state.virtual_ip.load();
+  if (dst_ip != BROADCAST_IP && dst_ip != local)
+    return;
+  DeliverVoice(src_ip, audio, payload, length);
 }
 
 void HandleFrame(ENetPeer* from, const u8* data, std::size_t size)
@@ -560,7 +675,10 @@ void HandleFrame(ENetPeer* from, const u8* data, std::size_t size)
   {
     VNET_TRACE_BYTES(Rx, payload, length, "DATA {} -> {}", FormatIP(src_ip), FormatIP(dst_ip));
   }
-  else
+  // Voice audio is deliberately not traced. It arrives fifty times a second per
+  // talking peer, and a line each would bury everything the trace exists for
+  // under audio that says nothing except that someone is speaking.
+  else if (header.type != TYPE_VOICE)
   {
     VNET_TRACE(Rx, "{} {} -> {}, {} bytes", TypeName(header.type), FormatIP(src_ip),
                FormatIP(dst_ip), length);
@@ -585,6 +703,14 @@ void HandleFrame(ENetPeer* from, const u8* data, std::size_t size)
 
   case TYPE_DATA:
     HandleData(from, header, payload, length);
+    break;
+
+  case TYPE_VOICE:
+    HandleVoice(from, header, true, payload, length);
+    break;
+
+  case TYPE_VOICE_CONTROL:
+    HandleVoice(from, header, false, payload, length);
     break;
 
   case TYPE_REJECT:
@@ -659,7 +785,7 @@ void DrainOutgoing()
   }
 
   for (const Outgoing& out : batch)
-    RouteToPeers(out.dst_ip, out.is_control, out.frame, nullptr);
+    RouteToPeers(out.dst_ip, out.wire, out.frame, nullptr);
 }
 
 void HandleDisconnect(ENetPeer* peer)
@@ -1070,11 +1196,42 @@ bool SendPayload(u32 dst_ip, const u8* data, std::size_t length)
       return false;
     }
 
-    QueueLocked(dst_ip, false, BuildFrame(TYPE_DATA, src_ip, dst_ip, data, length));
+    QueueLocked(dst_ip, Wire::Data, BuildFrame(TYPE_DATA, src_ip, dst_ip, data, length));
   }
 
   VNET_TRACE_BYTES(Tx, data, length, "DATA {} -> {}", FormatIP(src_ip), FormatIP(dst_ip));
   return true;
+}
+
+bool SendVoice(u32 dst_ip, bool audio, const u8* data, std::size_t length)
+{
+  if (!s_state.active.load() || length > MAX_PAYLOAD)
+    return false;
+
+  const u32 src_ip = s_state.virtual_ip.load();
+  if (src_ip == 0)
+    return false;
+
+  if (MeansEveryone(dst_ip))
+    dst_ip = BROADCAST_IP;
+
+  std::lock_guard lock{s_state.mutex};
+  if (s_state.role == Role::Host && dst_ip != BROADCAST_IP && !s_state.ip_peers.contains(dst_ip))
+    return false;
+  if (s_state.role == Role::Client && !s_state.server_peer.load())
+    return false;
+
+  const u8 type = audio ? TYPE_VOICE : TYPE_VOICE_CONTROL;
+  QueueLocked(dst_ip, audio ? Wire::VoiceAudio : Wire::VoiceControl,
+              BuildFrame(type, src_ip, dst_ip, data, length));
+  return true;
+}
+
+void SetVoiceHandler(VoiceHandler handler)
+{
+  std::lock_guard lock{s_state.handler_mutex};
+  s_state.voice_handler = std::move(handler);
+  VNET_TRACE(Lobby, "voice handler {}", s_state.voice_handler ? "attached" : "detached");
 }
 
 void SetPayloadHandler(PayloadHandler handler)

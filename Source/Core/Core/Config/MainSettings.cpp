@@ -465,6 +465,18 @@ const Info<bool> MAIN_MEMINSPECT_WEB{{System::Main, "MKWiiLauncher", "MemInspect
 const Info<int> MAIN_MEMINSPECT_WEB_PORT{{System::Main, "MKWiiLauncher", "MemInspectWebPort"},
                                          5000};
 
+const Info<bool> MAIN_VOICE_ENABLED{{System::Main, "MKWiiVoice", "Enabled"}, true};
+const Info<bool> MAIN_VOICE_MUTED{{System::Main, "MKWiiVoice", "Muted"}, false};
+const Info<bool> MAIN_VOICE_DEAFENED{{System::Main, "MKWiiVoice", "Deafened"}, false};
+const Info<int> MAIN_VOICE_BITRATE{{System::Main, "MKWiiVoice", "Bitrate"}, 64000};
+const Info<float> MAIN_VOICE_GATE_DB{{System::Main, "MKWiiVoice", "NoiseGateDb"}, -60.0f};
+const Info<int> MAIN_VOICE_MIC_GAIN{{System::Main, "MKWiiVoice", "MicGain"}, 100};
+const Info<int> MAIN_VOICE_MASTER_VOLUME{{System::Main, "MKWiiVoice", "MasterVolume"}, 100};
+const Info<int> MAIN_VOICE_DOPPLER{{System::Main, "MKWiiVoice", "Doppler"}, 100};
+const Info<float> MAIN_VOICE_PROXIMITY_RANGE{{System::Main, "MKWiiVoice", "ProximityRange"},
+                                             9000.0f};
+const Info<std::string> MAIN_VOICE_OUTPUT_DEVICE{{System::Main, "MKWiiVoice", "OutputDevice"}, ""};
+
 const Info<std::string> MAIN_ANALYTICS_ID{{System::Main, "Analytics", "ID"}, ""};
 const Info<bool> MAIN_ANALYTICS_ENABLED{{System::Main, "Analytics", "Enabled"}, false};
 const Info<bool> MAIN_ANALYTICS_PERMISSION_ASKED{{System::Main, "Analytics", "PermissionAsked"},

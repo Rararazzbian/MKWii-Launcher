@@ -18,7 +18,8 @@ const Info<int> GFX_ADAPTER{{System::GFX, "Hardware", "Adapter"}, 0};
 
 // Graphics.Settings
 
-const Info<bool> GFX_WIDESCREEN_HACK{{System::GFX, "Settings", "wideScreenHack"}, false};
+// Fork: on by default. The launcher exists to play one 16:9-capable game.
+const Info<bool> GFX_WIDESCREEN_HACK{{System::GFX, "Settings", "wideScreenHack"}, true};
 const Info<AspectMode> GFX_ASPECT_RATIO{{System::GFX, "Settings", "AspectRatio"}, AspectMode::Auto};
 const Info<int> GFX_CUSTOM_ASPECT_RATIO_WIDTH{{System::GFX, "Settings", "CustomAspectRatioWidth"},
                                               1};
@@ -86,9 +87,12 @@ const Info<bool> GFX_ENABLE_GPU_TEXTURE_DECODING{
     {System::GFX, "Settings", "EnableGPUTextureDecoding"}, false};
 const Info<bool> GFX_ENABLE_PIXEL_LIGHTING{{System::GFX, "Settings", "EnablePixelLighting"}, false};
 const Info<bool> GFX_FAST_DEPTH_CALC{{System::GFX, "Settings", "FastDepthCalc"}, true};
-const Info<u32> GFX_MSAA{{System::GFX, "Settings", "MSAA"}, 1};
+// Fork: 2x MSAA by default. Cheap on anything that can run this at all.
+const Info<u32> GFX_MSAA{{System::GFX, "Settings", "MSAA"}, 2};
 const Info<bool> GFX_SSAA{{System::GFX, "Settings", "SSAA"}, false};
-const Info<int> GFX_EFB_SCALE{{System::GFX, "Settings", "InternalResolution"}, 1};
+// Fork: 0 is Auto - a multiple of 640x528 chosen from the window size,
+// rather than native.
+const Info<int> GFX_EFB_SCALE{{System::GFX, "Settings", "InternalResolution"}, 0};
 const Info<int> GFX_MAX_EFB_SCALE{{System::GFX, "Settings", "MaxInternalResolution"}, 12};
 const Info<bool> GFX_TEXFMT_OVERLAY_ENABLE{{System::GFX, "Settings", "TexFmtOverlayEnable"}, false};
 const Info<bool> GFX_TEXFMT_OVERLAY_CENTER{{System::GFX, "Settings", "TexFmtOverlayCenter"}, false};
@@ -105,10 +109,14 @@ const Info<int> GFX_COMMAND_BUFFER_EXECUTE_INTERVAL{
     {System::GFX, "Settings", "CommandBufferExecuteInterval"}, 100};
 
 const Info<bool> GFX_SHADER_CACHE{{System::GFX, "Settings", "ShaderCache"}, true};
+// Fork: compile before starting, and skip drawing rather than stuttering
+// while anything missed is compiled. One known game, so the wait happens
+// once and the race that follows is smooth.
 const Info<bool> GFX_WAIT_FOR_SHADERS_BEFORE_STARTING{
-    {System::GFX, "Settings", "WaitForShadersBeforeStarting"}, false};
+    {System::GFX, "Settings", "WaitForShadersBeforeStarting"}, true};
 const Info<ShaderCompilationMode> GFX_SHADER_COMPILATION_MODE{
-    {System::GFX, "Settings", "ShaderCompilationMode"}, ShaderCompilationMode::Synchronous};
+    {System::GFX, "Settings", "ShaderCompilationMode"},
+    ShaderCompilationMode::AsynchronousSkipRendering};
 const Info<int> GFX_SHADER_COMPILER_THREADS{{System::GFX, "Settings", "ShaderCompilerThreads"}, 1};
 const Info<int> GFX_SHADER_PRECOMPILER_THREADS{
     {System::GFX, "Settings", "ShaderPrecompilerThreads"}, -1};

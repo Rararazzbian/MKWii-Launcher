@@ -128,7 +128,7 @@ option(USE_RETRO_ACHIEVEMENTS "Enables integration with retroachievements.org" O
 # and Dashboard.cpp are not compiled, the menu entry is not created, and there is
 # no listening socket and no embedded page anywhere in the binary.
 option(MKW_MEMORY_INSPECTOR_WEB
-       "Serve the memory inspector dashboard over HTTP on localhost" ON)
+       "Serve the memory inspector dashboard over HTTP on localhost" OFF)
 option(ENABLE_CCACHE "Enables CCache compiler cache" OFF)
 
 # Upstream note, kept for context:
@@ -703,6 +703,12 @@ dolphin_find_optional_system_library_pkgconfig(SPNG spng spng::spng Externals/li
 # There is no system FreeSurround library.
 message(STATUS "Using static FreeSurround from Externals")
 add_subdirectory(Externals/FreeSurround)
+
+# Fork: lobby voice chat. Always from Externals rather than a system copy - the
+# bitrate the lobby host picks is passed straight to the encoder, so the version
+# in use should be the one this was built against.
+message(STATUS "Using static Opus from Externals")
+add_subdirectory(Externals/opus)
 
 if (APPLE OR WIN32)
   message(STATUS "Using ed25519 from Externals")

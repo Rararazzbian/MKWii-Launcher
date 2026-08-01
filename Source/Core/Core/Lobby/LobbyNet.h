@@ -66,6 +66,11 @@ struct Peer
 // Invoked on the lobby thread, once per frame addressed to this console.
 using PayloadHandler = std::function<void(u32 src_ip, u32 dst_ip, const u8* data, std::size_t len)>;
 
+// Voice rides the same link but is not the console's traffic - it is between
+// Dolphin instances, and is delivered whether or not the virtual network is up.
+// `audio` separates encoded speech from the occasional control message.
+using VoiceHandler = std::function<void(u32 src_ip, bool audio, const u8* data, std::size_t len)>;
+
 // Starts hosting on `port`, or joins `address` ("host:port"). Returns false
 // only if the socket could not be created; a client that cannot reach its host
 // starts successfully and reports Status::Failed once it gives up.
@@ -112,4 +117,12 @@ bool SendPayload(u32 dst_ip, const u8* data, std::size_t length);
 
 // Replaces the handler invoked for incoming frames. Pass nullptr to detach.
 void SetPayloadHandler(PayloadHandler handler);
+
+// Sends on the voice channel. `audio` true is an encoded frame, sent unreliably
+// and unsequenced on a channel of its own - a retransmitted 20 ms frame arrives
+// after the moment it belonged to, and holding later audio behind it turns one
+// lost packet into an audible stall. `audio` false is a control message and
+// travels reliably alongside the lobby's own control traffic.
+bool SendVoice(u32 dst_ip, bool audio, const u8* data, std::size_t length);
+void SetVoiceHandler(VoiceHandler handler);
 }  // namespace Lobby

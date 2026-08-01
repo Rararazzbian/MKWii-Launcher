@@ -303,6 +303,20 @@ extern const Info<bool> MAIN_LOBBY_NET_TRACE_PAYLOADS;
 extern const Info<bool> MAIN_MEMINSPECT_WEB;
 extern const Info<int> MAIN_MEMINSPECT_WEB_PORT;
 
+// Fork: lobby voice chat. Per-peer volumes are not here - their keys are player
+// nicknames, which are not known at build time. See Core/Lobby/Voice.
+extern const Info<bool> MAIN_VOICE_ENABLED;
+extern const Info<bool> MAIN_VOICE_MUTED;
+extern const Info<bool> MAIN_VOICE_DEAFENED;
+// Only the host's value is used; it is pushed to everyone in the lobby.
+extern const Info<int> MAIN_VOICE_BITRATE;
+extern const Info<float> MAIN_VOICE_GATE_DB;
+extern const Info<int> MAIN_VOICE_MIC_GAIN;
+extern const Info<int> MAIN_VOICE_MASTER_VOLUME;
+extern const Info<int> MAIN_VOICE_DOPPLER;
+extern const Info<float> MAIN_VOICE_PROXIMITY_RANGE;
+extern const Info<std::string> MAIN_VOICE_OUTPUT_DEVICE;
+
 extern const Info<std::string> MAIN_ANALYTICS_ID;
 extern const Info<bool> MAIN_ANALYTICS_ENABLED;
 extern const Info<bool> MAIN_ANALYTICS_PERMISSION_ASKED;
