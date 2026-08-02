@@ -1,0 +1,37 @@
+<!-- SPDX-License-Identifier: GPL-2.0-or-later -->
+<!-- Voice chat: microphone live. Overlay button, drawn over the game, so the
+     colours are fixed rather than theme attributes - the overlay's own opacity
+     setting is applied to the bitmap afterwards. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="#000000"
+        android:fillAlpha="0.45"
+        android:pathData="M12,1a11,11 0 1 1 0,22a11,11 0 1 1 0,-22z" />
+
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M9,6a3,3 0 0 1 6,0v4a3,3 0 0 1 -6,0z" />
+
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M7,11a5,5 0 0 0 10,0" />
+
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M12,16v3" />
+
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M9,19h6" />
+</vector>

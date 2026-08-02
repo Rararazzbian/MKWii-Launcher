@@ -19,6 +19,12 @@ import android.view.MotionEvent
  * @param legacyId           Legacy identifier (ButtonType) for this type of button.
  * @param control            Control ID for this type of button.
  * @param latching           Whether this button is latching.
+ * @param action             Fork: set on buttons that drive the launcher rather than the
+ *                           emulated controller - voice mute and deafen. When present it is
+ *                           invoked once per press and [control] is not sent anywhere, so the
+ *                           value passed for it is ignored. Returns the state the button
+ *                           should now be drawn in, which for these is what the action
+ *                           toggled rather than whether a finger is down.
  */
 class InputOverlayDrawableButton(
     res: Resources,
@@ -26,7 +32,8 @@ class InputOverlayDrawableButton(
     pressedStateBitmap: Bitmap,
     val legacyId: Int,
     val control: Int,
-    var latching: Boolean
+    var latching: Boolean,
+    val action: (() -> Boolean)? = null
 ) {
     var trackId: Int = -1
     private var previousTouchX = 0

@@ -17,6 +17,7 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.View.OnTouchListener
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
 import org.dolphinemu.dolphinemu.DolphinApplication
 import org.dolphinemu.dolphinemu.NativeLibrary
@@ -26,6 +27,7 @@ import org.dolphinemu.dolphinemu.features.input.model.InputMappingBooleanSetting
 import org.dolphinemu.dolphinemu.features.input.model.InputOverrider
 import org.dolphinemu.dolphinemu.features.input.model.InputOverrider.ControlId
 import org.dolphinemu.dolphinemu.features.input.model.controlleremu.EmulatedController
+import org.dolphinemu.dolphinemu.features.lobby.Lobby
 import org.dolphinemu.dolphinemu.features.settings.model.BooleanSetting
 import org.dolphinemu.dolphinemu.features.settings.model.IntSetting
 import org.dolphinemu.dolphinemu.features.settings.model.IntSetting.Companion.getSettingForSIDevice
@@ -65,6 +67,15 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
     init {
         if (!preferences.getBoolean("OverlayInitV3", false))
             defaultOverlay()
+
+        // Fork: a key of its own rather than bumping OverlayInitV3, so that anyone
+        // already past that one still gets a sensible first placement for the voice
+        // buttons instead of both of them stacked in the corner at 0,0.
+        if (!preferences.getBoolean("VoiceOverlayInit", false)) {
+            voiceDefaultOverlay("")
+            voiceDefaultOverlay("-Portrait")
+            preferences.edit().putBoolean("VoiceOverlayInit", true).apply()
+        }
 
         // Set the on touch listener.
         setOnTouchListener(this)
@@ -154,18 +165,29 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
                             event.getY(pointerIndex).toInt()
                         )
                     ) {
-                        button.setPressedState(if (button.latching) !button.getPressedState() else true)
                         button.trackId = event.getPointerId(pointerIndex)
                         pressed = true
-                        InputOverrider.setControlState(controllerIndex, button.control, if (button.getPressedState()) 1.0 else 0.0)
 
-                        val analogControl = getAnalogControlForTrigger(button.control)
-                        if (analogControl >= 0)
-                            InputOverrider.setControlState(
-                                controllerIndex,
-                                analogControl,
-                                1.0
-                            )
+                        // Fork: a launcher button (voice mute, deafen). It toggles
+                        // something of its own and is drawn in whatever state that
+                        // left behind, so nothing is sent to the emulated controller
+                        // here or on release.
+                        val action = button.action
+                        if (action != null) {
+                            button.setPressedState(action())
+                            invalidate()
+                        } else {
+                            button.setPressedState(if (button.latching) !button.getPressedState() else true)
+                            InputOverrider.setControlState(controllerIndex, button.control, if (button.getPressedState()) 1.0 else 0.0)
+
+                            val analogControl = getAnalogControlForTrigger(button.control)
+                            if (analogControl >= 0)
+                                InputOverrider.setControlState(
+                                    controllerIndex,
+                                    analogControl,
+                                    1.0
+                                )
+                        }
                     }
                 }
 
@@ -173,17 +195,21 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
                 MotionEvent.ACTION_POINTER_UP -> {
                     // If a pointer ends, release the button it was pressing.
                     if (button.trackId == event.getPointerId(pointerIndex)) {
-                        if (!button.latching)
-                            button.setPressedState(false)
-                        InputOverrider.setControlState(controllerIndex, button.control, if (button.getPressedState()) 1.0 else 0.0)
+                        // Fork: a launcher button keeps the state its action left it
+                        // in, and never had a control to release.
+                        if (button.action == null) {
+                            if (!button.latching)
+                                button.setPressedState(false)
+                            InputOverrider.setControlState(controllerIndex, button.control, if (button.getPressedState()) 1.0 else 0.0)
 
-                        val analogControl = getAnalogControlForTrigger(button.control)
-                        if (analogControl >= 0)
-                            InputOverrider.setControlState(
-                                controllerIndex,
-                                analogControl,
-                                0.0
-                            )
+                            val analogControl = getAnalogControlForTrigger(button.control)
+                            if (analogControl >= 0)
+                                InputOverrider.setControlState(
+                                    controllerIndex,
+                                    analogControl,
+                                    0.0
+                                )
+                        }
 
                         button.trackId = -1
                     }
@@ -1047,10 +1073,68 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
 
                 OVERLAY_NONE -> {}
             }
+
+            // Fork: voice chat. Independent of the controller type - it is the
+            // launcher's own state, not the console's - so it is added outside the
+            // when above and shown for every overlay including OVERLAY_NONE.
+            addVoiceOverlayControls(orientation)
         }
 
         isFirstRun = false
         invalidate()
+    }
+
+    /**
+     * Fork: mute and deafen, on the overlay rather than behind the pause menu.
+     *
+     * Reaching a menu mid-race is not realistic, and these are the two voice
+     * controls that are useless if they are not immediate. They are ordinary
+     * overlay buttons otherwise - dragged, scaled and faded with everything else.
+     */
+    private fun addVoiceOverlayControls(orientation: String) {
+        if (!BooleanSetting.MAIN_VOICE_ENABLED.boolean) return
+
+        // Deafening stops sending as well as receiving, so the microphone is not
+        // live while deafened even though mute itself is still off. The button
+        // shows whether anyone can hear you, which is the question being asked of
+        // it, rather than the value of one flag.
+        val micIsSilent = { Lobby.isVoiceMuted || Lobby.isVoiceDeafened }
+
+        val mute = initializeVoiceButton(
+            context,
+            R.drawable.voice_mic,
+            R.drawable.voice_mic_muted,
+            ButtonType.VOICE_MUTE,
+            orientation
+        ) {
+            // Tapping while deafened un-deafens too. Otherwise the button appears
+            // stuck: it is drawn silent, tapping it changes nothing visible, and
+            // there is no way to tell why from here.
+            if (Lobby.isVoiceDeafened) {
+                Lobby.isVoiceDeafened = false
+                Lobby.isVoiceMuted = false
+            } else {
+                Lobby.isVoiceMuted = !Lobby.isVoiceMuted
+            }
+            micIsSilent()
+        }
+        mute.setPressedState(micIsSilent())
+        overlayButtons.add(mute)
+
+        val deafen = initializeVoiceButton(
+            context,
+            R.drawable.voice_headphones,
+            R.drawable.voice_headphones_deafened,
+            ButtonType.VOICE_DEAFEN,
+            orientation
+        ) {
+            Lobby.isVoiceDeafened = !Lobby.isVoiceDeafened
+            // The microphone goes silent with it, so redraw that button too.
+            mute.setPressedState(micIsSilent())
+            Lobby.isVoiceDeafened
+        }
+        deafen.setPressedState(Lobby.isVoiceDeafened)
+        overlayButtons.add(deafen)
     }
 
     fun refreshOverlayPointer() {
@@ -1085,7 +1169,42 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
                 wiiOnlyPortraitDefaultOverlay()
             }
         }
+        // Fork: the voice buttons move back to the corner with everything else.
+        voiceDefaultOverlay(if (isLandscape) "" else "-Portrait")
         refreshControls()
+    }
+
+    /**
+     * Fork: first placement for the voice buttons - the top left corner, which no
+     * overlay layout uses. Not part of the per-controller default functions because
+     * these two are the same whatever is being emulated, and their saved positions
+     * are not keyed by controller type either.
+     */
+    private fun voiceDefaultOverlay(orientation: String) {
+        val display = (context as Activity).windowManager.defaultDisplay
+        val outMetrics = DisplayMetrics()
+        display.getMetrics(outMetrics)
+        var maxX = outMetrics.heightPixels.toFloat()
+        var maxY = outMetrics.widthPixels.toFloat()
+        if (maxY > maxX) {
+            val tmp = maxX
+            maxX = maxY
+            maxY = tmp
+        }
+        if (orientation.isNotEmpty()) {
+            val tmp = maxX
+            maxX = maxY
+            maxY = tmp
+        }
+
+        // Per mille of the screen, matching the integers the rest of the overlay
+        // defaults are stored as.
+        preferences.edit()
+            .putFloat(ButtonType.VOICE_MUTE.toString() + orientation + "-X", 0.020f * maxX)
+            .putFloat(ButtonType.VOICE_MUTE.toString() + orientation + "-Y", 0.030f * maxY)
+            .putFloat(ButtonType.VOICE_DEAFEN.toString() + orientation + "-X", 0.115f * maxX)
+            .putFloat(ButtonType.VOICE_DEAFEN.toString() + orientation + "-Y", 0.030f * maxY)
+            .apply()
     }
 
     private fun saveControlPosition(sharedPrefsId: Int, x: Int, y: Int, orientation: String) {
@@ -1126,6 +1245,53 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
      * @param latching     Whether the button is latching.
      * @return An [InputOverlayDrawableButton] with the correct drawing bounds set.
      */
+    /**
+     * Fork: the same as [initializeOverlayButton], for a button that runs an action
+     * instead of driving the emulated controller.
+     *
+     * The icons are vector drawables rather than the PNGs the controller buttons
+     * use, so they are rendered rather than decoded - [BitmapFactory.decodeResource]
+     * returns null for a vector and the button would come up blank.
+     */
+    private fun initializeVoiceButton(
+        context: Context,
+        defaultResId: Int,
+        pressedResId: Int,
+        legacyId: Int,
+        orientation: String,
+        action: () -> Boolean
+    ): InputOverlayDrawableButton {
+        var scale = 0.09f
+        scale *= (IntSetting.MAIN_CONTROL_SCALE.int + 50).toFloat()
+        scale /= 100f
+
+        val overlayDrawable = InputOverlayDrawableButton(
+            resources,
+            resizeBitmap(context, renderToBitmap(context, defaultResId), scale),
+            resizeBitmap(context, renderToBitmap(context, pressedResId), scale),
+            legacyId,
+            0,
+            false,
+            action
+        )
+
+        val drawableX =
+            preferences.getFloat(getXKey(legacyId, controllerType, orientation), 0f).toInt()
+        val drawableY =
+            preferences.getFloat(getYKey(legacyId, controllerType, orientation), 0f).toInt()
+
+        overlayDrawable.setBounds(
+            drawableX,
+            drawableY,
+            drawableX + overlayDrawable.width,
+            drawableY + overlayDrawable.height
+        )
+        overlayDrawable.setPosition(drawableX, drawableY)
+        overlayDrawable.setOpacity(IntSetting.MAIN_CONTROL_OPACITY.int * 255 / 100)
+
+        return overlayDrawable
+    }
+
     private fun initializeOverlayButton(
         context: Context,
         defaultResId: Int,
@@ -2312,6 +2478,27 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
          * @param scale   The scale factor for the bitmap.
          * @return The scaled [Bitmap]
          */
+        /**
+         * Fork: rasterises a drawable at its intrinsic size.
+         *
+         * The controller buttons are PNGs and go through BitmapFactory, which
+         * returns null for a vector drawable. The voice buttons are vectors, so
+         * they are drawn into a bitmap instead and then scaled by [resizeBitmap]
+         * like everything else.
+         */
+        fun renderToBitmap(context: Context, resId: Int): Bitmap {
+            val drawable = ContextCompat.getDrawable(context, resId)!!
+            val bitmap = Bitmap.createBitmap(
+                drawable.intrinsicWidth,
+                drawable.intrinsicHeight,
+                Bitmap.Config.ARGB_8888
+            )
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, canvas.width, canvas.height)
+            drawable.draw(canvas)
+            return bitmap
+        }
+
         fun resizeBitmap(context: Context, bitmap: Bitmap, scale: Float): Bitmap {
             // Determine the button size based on the smaller screen dimension.
             // This makes sure the buttons are the same size in both portrait and landscape.
