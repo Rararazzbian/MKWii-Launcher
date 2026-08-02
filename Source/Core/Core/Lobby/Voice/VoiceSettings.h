@@ -55,6 +55,9 @@ struct Settings
   // heard while unable to hear the reply is not a state anyone wants.
   bool muted = false;
   bool deafened = false;
+  // Place voices left and right by where that kart is. See MAIN_VOICE_SPATIAL
+  // for why this is off by default on phones.
+  bool spatial = true;
 
   // Set by the host and pushed to everyone; a client's own value is only what
   // it last heard.
@@ -80,6 +83,7 @@ Settings Get();
 void SetEnabled(bool enabled);
 void SetMuted(bool muted);
 void SetDeafened(bool deafened);
+void SetSpatial(bool spatial);
 void SetBitrate(int bitrate);
 void SetGateDb(float db);
 void SetMicGain(int percent);

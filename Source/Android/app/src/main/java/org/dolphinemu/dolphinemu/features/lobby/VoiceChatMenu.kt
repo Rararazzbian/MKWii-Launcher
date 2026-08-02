@@ -68,6 +68,19 @@ object VoiceChatMenu {
         }
         content.addView(deafen)
 
+        val spatial = SwitchCompat(activity).apply {
+            setText(R.string.voice_spatial)
+            isChecked = Lobby.isVoiceSpatial
+            setOnClickListener { Lobby.isVoiceSpatial = isChecked }
+        }
+        content.addView(spatial)
+
+        content.addView(TextView(activity).apply {
+            setText(R.string.voice_spatial_description)
+            alpha = 0.7f
+            textSize = 12f
+        })
+
         // Percent sliders run to 200 because unity is 100 - the same range the
         // desktop panel offers.
         content.addView(sliderLabel(activity, R.string.voice_master_volume, dp(12)))

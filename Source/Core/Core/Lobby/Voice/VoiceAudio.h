@@ -34,6 +34,11 @@ namespace Lobby::Voice
 // not itself the problem.
 constexpr std::size_t RING_SAMPLES = 12000;
 
+// Playback is stereo so voices can be placed left and right. Capture stays mono:
+// a microphone has one position, and sending two identical channels would double
+// the bitrate to say nothing.
+constexpr std::size_t OUTPUT_CHANNELS = 2;
+
 // A fixed-size circular buffer of mono float samples, written by one thread and
 // read by another.
 class SampleRing
@@ -89,6 +94,7 @@ private:
   cubeb_stream* m_output_stream = nullptr;
 
   SampleRing m_captured{RING_SAMPLES};
-  SampleRing m_to_play{RING_SAMPLES};
+  // Interleaved, so it holds the same span of time as the mono capture ring.
+  SampleRing m_to_play{RING_SAMPLES * OUTPUT_CHANNELS};
 };
 }  // namespace Lobby::Voice

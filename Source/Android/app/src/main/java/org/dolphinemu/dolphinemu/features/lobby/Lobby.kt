@@ -174,6 +174,18 @@ object Lobby {
         get() = nativeGetGateDb()
         set(value) = nativeSetGateDb(value)
 
+    /**
+     * Place each voice left or right by where that kart is, relative to which way
+     * you are facing.
+     *
+     * Off by default on Android: the usual case there is a phone at arm's length
+     * with its speakers a few centimetres apart, where panning is an unbalanced
+     * mix rather than a direction. Worth turning on for headphones.
+     */
+    var isVoiceSpatial: Boolean
+        get() = nativeIsSpatial()
+        set(value) = nativeSetSpatial(value)
+
     val minVoiceGateDb: Float get() = nativeGetMinGateDb()
     val maxVoiceGateDb: Float get() = nativeGetMaxGateDb()
 
@@ -275,4 +287,10 @@ object Lobby {
 
     @JvmStatic
     private external fun nativeGetMaxGateDb(): Float
+
+    @JvmStatic
+    private external fun nativeSetSpatial(spatial: Boolean)
+
+    @JvmStatic
+    private external fun nativeIsSpatial(): Boolean
 }

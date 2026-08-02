@@ -105,6 +105,7 @@ void Load()
   s_settings.enabled = Config::Get(Config::MAIN_VOICE_ENABLED);
   s_settings.muted = Config::Get(Config::MAIN_VOICE_MUTED);
   s_settings.deafened = Config::Get(Config::MAIN_VOICE_DEAFENED);
+  s_settings.spatial = Config::Get(Config::MAIN_VOICE_SPATIAL);
   s_settings.bitrate = std::clamp(Config::Get(Config::MAIN_VOICE_BITRATE), MIN_BITRATE,
                                   MAX_BITRATE);
   s_settings.gate_db =
@@ -167,6 +168,15 @@ void SetMuted(bool muted)
     s_settings.muted = muted;
   }
   Config::SetBase(Config::MAIN_VOICE_MUTED, muted);
+}
+
+void SetSpatial(bool spatial)
+{
+  {
+    std::lock_guard lock(s_mutex);
+    s_settings.spatial = spatial;
+  }
+  Config::SetBase(Config::MAIN_VOICE_SPATIAL, spatial);
 }
 
 void SetDeafened(bool deafened)

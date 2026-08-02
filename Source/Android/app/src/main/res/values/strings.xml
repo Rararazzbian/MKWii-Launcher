@@ -1054,6 +1054,8 @@ It can efficiently compress both junk data and encrypted Wii data.
     <string name="voice_chat">Voice chat</string>
     <string name="voice_mute">Mute</string>
     <string name="voice_deafen">Deafen</string>
+    <string name="voice_spatial">Spatial audio</string>
+    <string name="voice_spatial_description">Places each voice left or right by where they are on the track. Best with headphones; a phone\'s own speakers are too close together for it to read as direction.</string>
     <string name="voice_master_volume">Master volume</string>
     <string name="voice_mic_gain">Microphone gain</string>
     <string name="voice_noise_gate">Noise gate: %1$d dB — raise until the game stops being sent</string>

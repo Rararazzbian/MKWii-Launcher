@@ -306,6 +306,7 @@ extern const Info<int> MAIN_MEMINSPECT_WEB_PORT;
 // Fork: lobby voice chat. Per-peer volumes are not here - their keys are player
 // nicknames, which are not known at build time. See Core/Lobby/Voice.
 extern const Info<bool> MAIN_VOICE_ENABLED;
+extern const Info<bool> MAIN_VOICE_SPATIAL;
 extern const Info<bool> MAIN_VOICE_MUTED;
 extern const Info<bool> MAIN_VOICE_DEAFENED;
 // Only the host's value is used; it is pushed to everyone in the lobby.

@@ -106,8 +106,10 @@ long AudioDevices::OutputCallback(cubeb_stream*, void* user, const void* /*input
   if (output == nullptr || frames <= 0)
     return frames;
   // Read zero-fills what it does not have, so an empty ring plays silence
-  // rather than whatever the driver left in the buffer.
-  self->m_to_play.Read(static_cast<float*>(output), static_cast<std::size_t>(frames));
+  // rather than whatever the driver left in the buffer. Frames are stereo pairs;
+  // the ring holds individual samples.
+  self->m_to_play.Read(static_cast<float*>(output),
+                       static_cast<std::size_t>(frames) * OUTPUT_CHANNELS);
   return frames;
 }
 
@@ -178,8 +180,12 @@ bool AudioDevices::StartPlayback(const std::string& device_id)
   cubeb_stream_params params{};
   params.format = CUBEB_SAMPLE_FLOAT32NE;
   params.rate = SAMPLE_RATE;
-  params.channels = 1;
-  params.layout = CUBEB_LAYOUT_MONO;
+  // Stereo even when spatial audio is off, in which case both channels get the
+  // same thing. The alternative is tearing the stream down and rebuilding it
+  // whenever the setting changes, mid-race, which is worse than one wasted
+  // channel of bandwidth to the sound card.
+  params.channels = OUTPUT_CHANNELS;
+  params.layout = CUBEB_LAYOUT_STEREO;
 
   u32 latency = 0;
   if (cubeb_get_min_latency(m_context.get(), &params, &latency) != CUBEB_OK)

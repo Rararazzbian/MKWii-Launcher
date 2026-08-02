@@ -469,6 +469,18 @@ const Info<int> MAIN_MEMINSPECT_WEB_PORT{{System::Main, "MKWiiLauncher", "MemIns
                                          5000};
 
 const Info<bool> MAIN_VOICE_ENABLED{{System::Main, "MKWiiVoice", "Enabled"}, true};
+// Spatial audio: place each voice left or right by where that kart is relative
+// to which way you are facing. Defaults on where headphones or speakers with
+// some distance between them are the norm, and off on Android, where the usual
+// case is a phone held at arm's length with its speakers a few centimetres
+// apart - which turns panning into an unbalanced mix rather than a direction.
+const Info<bool> MAIN_VOICE_SPATIAL{{System::Main, "MKWiiVoice", "Spatial"},
+#ifdef ANDROID
+                                    false
+#else
+                                    true
+#endif
+};
 const Info<bool> MAIN_VOICE_MUTED{{System::Main, "MKWiiVoice", "Muted"}, false};
 const Info<bool> MAIN_VOICE_DEAFENED{{System::Main, "MKWiiVoice", "Deafened"}, false};
 const Info<int> MAIN_VOICE_BITRATE{{System::Main, "MKWiiVoice", "Bitrate"}, 64000};

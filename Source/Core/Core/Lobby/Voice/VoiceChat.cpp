@@ -36,6 +36,7 @@ namespace Lobby::Voice
 {
 namespace
 {
+constexpr float PI_F = 3.14159265358979323846f;
 using Trace::Cat;
 
 constexpr u8 WIRE_VERSION = 1;
@@ -166,6 +167,10 @@ struct Peer
   bool have_distance = false;
   float proximity_gain = 1.0f;
   bool proximity_active = false;
+  // -1 hard left, 0 centre, +1 hard right. Smoothed towards the target rather
+  // than applied raw: positions are sampled at 20 Hz, and a voice jumping
+  // between ears on every sample is worse than one that lags slightly.
+  float pan = 0.0f;
 
   std::chrono::steady_clock::time_point last_heard{};
 };
@@ -276,6 +281,12 @@ struct KartPosition
   float x = 0.0f;
   float y = 0.0f;
   float z = 0.0f;
+  // Column 2 of the kart's rotation: the direction it is pointing, in world
+  // space, on the horizontal plane. Only read for the listener, and only to work
+  // out what "left" means to them. Zero when it could not be read, which is the
+  // signal to leave the voice centred rather than to guess a facing.
+  float fwd_x = 0.0f;
+  float fwd_z = 0.0f;
 };
 
 std::optional<KartPosition> ReadKart(const MemInspect::Snapshot& snapshot, int index)
@@ -289,7 +300,18 @@ std::optional<KartPosition> ReadKart(const MemInspect::Snapshot& snapshot, int i
     return std::nullopt;
   if (!std::isfinite(*x) || !std::isfinite(*y) || !std::isfinite(*z))
     return std::nullopt;
-  return KartPosition{*x, *y, *z};
+
+  KartPosition kart{*x, *y, *z};
+  // Missing or unreadable heading is not a failure: it only costs the panning,
+  // and everything else about this kart is still usable.
+  const auto fwd_x = FindFloat(snapshot, fmt::format("r{}_fwd_x", index));
+  const auto fwd_z = FindFloat(snapshot, fmt::format("r{}_fwd_z", index));
+  if (fwd_x && fwd_z && std::isfinite(*fwd_x) && std::isfinite(*fwd_z))
+  {
+    kart.fwd_x = *fwd_x;
+    kart.fwd_z = *fwd_z;
+  }
+  return kart;
 }
 
 // Whether this console is in a race that proximity should apply to, and whether
@@ -511,6 +533,7 @@ void UpdateProximity(float dt)
       peer.distance = -1.0f;
       peer.have_distance = false;
       peer.closing_rate = 0.0f;
+      peer.pan = 0.0f;
       continue;
     }
 
@@ -528,6 +551,30 @@ void UpdateProximity(float dt)
     }
     peer.distance = distance;
     peer.have_distance = true;
+
+    // Which ear. The listener's forward vector is the local +Z axis in world
+    // space, so its right is (fwd_z, -fwd_x) on the horizontal plane - the same
+    // vector turned a quarter turn. Projecting the direction to the other kart
+    // onto that gives -1 for hard left through to +1 for hard right, and the
+    // sign is what decides the side, so it is the one thing here worth being
+    // careful about.
+    float pan_target = 0.0f;
+    const float facing = std::sqrt(mine->fwd_x * mine->fwd_x + mine->fwd_z * mine->fwd_z);
+    const float flat = std::sqrt(dx * dx + dz * dz);
+    if (facing > 0.0001f && flat > 0.0001f)
+    {
+      const float right_x = mine->fwd_z / facing;
+      const float right_z = -mine->fwd_x / facing;
+      pan_target = std::clamp((dx * right_x + dz * right_z) / flat, -1.0f, 1.0f);
+
+      // Someone almost on top of you has no direction worth speaking of, and
+      // the projection gets noisy as the separation goes to nothing. Fade the
+      // panning out rather than let them flick between ears.
+      const float centre_fade = std::clamp(flat / DEFAULT_PROXIMITY_NEAR, 0.0f, 1.0f);
+      pan_target *= centre_fade;
+    }
+    // Roughly a tenth of a second to travel most of the way at 20 Hz.
+    peer.pan += (pan_target - peer.pan) * 0.35f;
 
     // Full volume up close, then a squared falloff to nothing at the range.
     // Squared rather than linear because linear stays too loud too far out.
@@ -618,7 +665,8 @@ void ProcessCapture(const Settings& settings)
 
 void ProcessPlayback(const Settings& settings, const MemInspect::Snapshot& snapshot)
 {
-  std::array<float, FRAME_SAMPLES> mix{};
+  // Interleaved stereo: [L0, R0, L1, R1, ...].
+  std::array<float, FRAME_SAMPLES * OUTPUT_CHANNELS> mix{};
   std::array<float, FRAME_SAMPLES> voice{};
 
   const float master = static_cast<float>(settings.master_volume) / 100.0f;
@@ -683,8 +731,19 @@ void ProcessPlayback(const Settings& settings, const MemInspect::Snapshot& snaps
     const float target = settings.deafened ? 0.0f : personal * peer.proximity_gain * master;
     peer.gain.Process(voice.data(), voice.size(), target);
 
-    for (std::size_t i = 0; i < mix.size(); ++i)
-      mix[i] += voice[i];
+    // Constant power, so someone crossing in front of you does not dip in
+    // loudness as they pass through the centre. At pan 0 both channels get
+    // 1/sqrt(2), which is the same total power as one channel at full.
+    const float pan = settings.spatial ? peer.pan : 0.0f;
+    const float angle = (pan + 1.0f) * (PI_F / 4.0f);
+    const float left = std::cos(angle);
+    const float right = std::sin(angle);
+
+    for (std::size_t i = 0; i < voice.size(); ++i)
+    {
+      mix[i * OUTPUT_CHANNELS] += voice[i] * left;
+      mix[i * OUTPUT_CHANNELS + 1] += voice[i] * right;
+    }
   }
 
   // Clip rather than let a loud moment with several people talking wrap around.

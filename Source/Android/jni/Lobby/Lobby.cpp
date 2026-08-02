@@ -389,6 +389,22 @@ Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeGetMaxGateDb(JNIEnv*, 
   return static_cast<jfloat>(Lobby::Voice::MAX_GATE_DB);
 }
 
+// Places each voice left or right by where that kart is relative to which way
+// this console is facing. Live, so it can be judged by ear against the race
+// rather than from a settings screen.
+JNIEXPORT void JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeSetSpatial(JNIEnv*, jclass,
+                                                                    jboolean spatial)
+{
+  Lobby::Voice::SetSpatial(spatial == JNI_TRUE);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeIsSpatial(JNIEnv*, jclass)
+{
+  return static_cast<jboolean>(Lobby::Voice::Get().spatial);
+}
+
 // --------------------------------------------------------------------------
 // The LAN Play Module.
 // --------------------------------------------------------------------------

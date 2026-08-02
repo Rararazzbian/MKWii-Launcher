@@ -186,8 +186,13 @@ void VoiceChatWindow::CreateWidgets()
   proximity_layout->addWidget(new QLabel(tr("Doppler:")), 0, 0);
   proximity_layout->addWidget(m_doppler, 0, 1);
   proximity_layout->addWidget(m_doppler_label, 0, 2);
+  m_spatial = new QCheckBox(tr("Spatial audio"));
+  m_spatial->setToolTip(tr("Places each voice left or right by where that kart is relative to the "
+                           "way you are facing. Best with headphones."));
+
   proximity_layout->addWidget(new QLabel(tr("Hearing range:")), 1, 0);
   proximity_layout->addWidget(m_proximity_range, 1, 1);
+  proximity_layout->addWidget(m_spatial, 2, 0, 1, 3);
   layout->addWidget(proximity);
 
   // --- Quality -------------------------------------------------------------
@@ -248,6 +253,9 @@ void VoiceChatWindow::ConnectWidgets()
     Lobby::Voice::SetMuted(on);
     Refresh();
   });
+  connect(m_spatial, &QCheckBox::toggled, this,
+          [](bool on) { Lobby::Voice::SetSpatial(on); });
+
   connect(m_deafen, &QPushButton::toggled, this, [this](bool on) {
     Lobby::Voice::SetDeafened(on);
     Refresh();
@@ -292,6 +300,9 @@ void VoiceChatWindow::LoadSettings()
   const Lobby::Voice::Settings settings = Lobby::Voice::Get();
 
   const QSignalBlocker block_mute(m_mute);
+  const QSignalBlocker block_spatial(m_spatial);
+  m_spatial->setChecked(settings.spatial);
+
   const QSignalBlocker block_deafen(m_deafen);
   m_mute->setChecked(settings.muted);
   m_deafen->setChecked(settings.deafened);

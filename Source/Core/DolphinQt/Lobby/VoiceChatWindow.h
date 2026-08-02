@@ -14,6 +14,7 @@
 #include <map>
 #include <string>
 
+#include <QCheckBox>
 #include <QDialog>
 #include <QSlider>
 
@@ -91,6 +92,7 @@ private:
   QLabel* m_bitrate_label;
 
   QSpinBox* m_proximity_range;
+  QCheckBox* m_spatial;
 
   QVBoxLayout* m_peer_layout;
   QLabel* m_peer_empty;
