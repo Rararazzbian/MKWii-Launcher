@@ -112,6 +112,7 @@ class SettingsFragmentPresenter(
             MenuTag.CONFIG_WII -> addWiiSettings(sl)
             MenuTag.CONFIG_ACHIEVEMENTS -> addAchievementSettings(sl);
             MenuTag.CONFIG_ADVANCED -> addAdvancedSettings(sl)
+            MenuTag.CONFIG_LOBBY -> addLobbySettings(sl)
             MenuTag.GRAPHICS -> addGraphicsSettings(sl)
             MenuTag.CONFIG_SERIALPORT1 -> addSerialPortSubSettings(sl, serialPort1Type)
             MenuTag.GCPAD_TYPE -> addGcPadSettings(sl)
@@ -194,6 +195,8 @@ class SettingsFragmentPresenter(
     }
 
     private fun addConfigSettings(sl: ArrayList<SettingsItem>) {
+        // Fork: first, because it is what this build is for.
+        sl.add(SubmenuSetting(context, R.string.lobby_settings, MenuTag.CONFIG_LOBBY))
         sl.add(SubmenuSetting(context, R.string.general_submenu, MenuTag.CONFIG_GENERAL))
         sl.add(SubmenuSetting(context, R.string.interface_submenu, MenuTag.CONFIG_INTERFACE))
         sl.add(SubmenuSetting(context, R.string.audio_submenu, MenuTag.CONFIG_AUDIO))
@@ -1076,6 +1079,75 @@ class SettingsFragmentPresenter(
                 )
             )
         }
+    }
+
+    /**
+     * Fork: the lobby the emulated console's virtual network runs over, and the
+     * voice chat that rides the same link.
+     *
+     * Everything here is read once, when the lobby starts, so all of it is marked
+     * not-runtime-editable in the settings enums and greys out while a game is
+     * running. The two controls worth changing mid-race - mute and deafen - are on
+     * the input overlay instead, where they take effect immediately.
+     */
+    private fun addLobbySettings(sl: ArrayList<SettingsItem>) {
+        sl.add(
+            InputStringSetting(
+                context,
+                StringSetting.MAIN_LOBBY_NICKNAME,
+                R.string.lobby_nickname,
+                R.string.lobby_nickname_description
+            )
+        )
+        sl.add(
+            SwitchSetting(
+                context,
+                BooleanSetting.MAIN_LOBBY_IS_HOST,
+                R.string.lobby_is_host,
+                R.string.lobby_is_host_description
+            )
+        )
+        sl.add(
+            InputStringSetting(
+                context,
+                StringSetting.MAIN_LOBBY_HOST_ADDRESS,
+                R.string.lobby_host_address,
+                R.string.lobby_host_address_description
+            )
+        )
+        // The port is an int in C++, but Config keeps every value as text in the
+        // ini and parses on read, so editing it as a string works and gives a
+        // numeric field instead of a slider nobody could drag to a exact port.
+        // Something unparseable falls back to the default rather than failing.
+        sl.add(
+            InputStringSetting(
+                context,
+                AdHocStringSetting(
+                    Settings.FILE_DOLPHIN,
+                    Settings.SECTION_INI_MKW_LAUNCHER,
+                    "LobbyPort",
+                    "7788"
+                ),
+                R.string.lobby_port,
+                R.string.lobby_port_description
+            )
+        )
+        sl.add(
+            SwitchSetting(
+                context,
+                BooleanSetting.MAIN_VOICE_ENABLED,
+                R.string.lobby_voice_enabled,
+                R.string.lobby_voice_enabled_description
+            )
+        )
+        sl.add(
+            SwitchSetting(
+                context,
+                BooleanSetting.MAIN_LOBBY_NET_TRACE,
+                R.string.lobby_net_trace,
+                R.string.lobby_net_trace_description
+            )
+        )
     }
 
     private fun addAdvancedSettings(sl: ArrayList<SettingsItem>) {

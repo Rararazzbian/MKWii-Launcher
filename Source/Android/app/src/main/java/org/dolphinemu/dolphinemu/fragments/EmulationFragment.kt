@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import org.dolphinemu.dolphinemu.NativeLibrary
 import org.dolphinemu.dolphinemu.activities.EmulationActivity
 import org.dolphinemu.dolphinemu.databinding.FragmentEmulationBinding
+import org.dolphinemu.dolphinemu.features.lobby.LobbyBoot
 import org.dolphinemu.dolphinemu.features.netplay.NetplayManager
 import org.dolphinemu.dolphinemu.features.settings.model.BooleanSetting
 import org.dolphinemu.dolphinemu.features.settings.model.Settings
@@ -222,6 +223,14 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                     }
                     NativeLibrary.Run(paths, riivolution, temporaryStateFilePath, true)
                 }
+                // Fork: the lobby link, up before the console boots so its first
+                // request for an address already gets a virtual one rather than a
+                // real adapter's. Not for the Wii Menu, which has no game to play
+                // over it, and not for Netplay, which is its own way of doing this.
+                val lobbyRunning =
+                    if (launchSystemMenu || netplaySession?.isLaunching == true) false
+                    else LobbyBoot.startIfConfigured(requireContext())
+
                 if (launchSystemMenu) {
                     Log.debug("[EmulationFragment] Starting emulation thread for the Wii Menu.")
                     NativeLibrary.RunSystemMenu()
@@ -250,6 +259,10 @@ class EmulationFragment : Fragment(), SurfaceHolder.Callback {
                     }
                     NativeLibrary.Run(paths, riivolution)
                 }
+                // Run() returns once the console has stopped, so the link comes
+                // down here rather than being left holding its port open while
+                // sitting back on the game list.
+                if (lobbyRunning) LobbyBoot.stop()
                 EmulationActivity.stopIgnoringLaunchRequests()
             }, "NativeEmulation")
             emulationThread.start()

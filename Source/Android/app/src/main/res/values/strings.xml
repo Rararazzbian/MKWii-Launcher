@@ -1059,4 +1059,21 @@ It can efficiently compress both junk data and encrypted Wii data.
     <string name="voice_people">In the lobby</string>
     <string name="voice_nobody_here">Nobody else is here yet.</string>
     <string name="voice_your_address">You are %1$s</string>
+    <string name="lobby_failed_to_start">Could not start the lobby. Playing offline.\n\n%1$s</string>
+    <string name="lobby_no_reply">No reply from the lobby host. Playing offline.\n\n%1$s</string>
+
+    <string name="lobby_settings">Lobby</string>
+    <string name="lobby_settings_description">Nickname, hosting and voice chat</string>
+    <string name="lobby_nickname">Nickname</string>
+    <string name="lobby_nickname_description">How you appear to everyone else. Required.</string>
+    <string name="lobby_is_host">Host the lobby</string>
+    <string name="lobby_is_host_description">Off if you are joining someone else\'s lobby.</string>
+    <string name="lobby_host_address">Host address</string>
+    <string name="lobby_host_address_description">Who to join, as an address or "address:port". Only used when not hosting.</string>
+    <string name="lobby_port">Port</string>
+    <string name="lobby_port_description">The port to host on, or to join if the address does not name one.</string>
+    <string name="lobby_voice_enabled">Voice chat</string>
+    <string name="lobby_voice_enabled_description">Talk to the others in the lobby, positionally during a race.</string>
+    <string name="lobby_net_trace">Log the virtual network</string>
+    <string name="lobby_net_trace_description">Writes every packet to User/Logs/VirtualNet.log. Leave on unless you need the space.</string>
 </resources>

@@ -16,6 +16,8 @@ enum class MenuTag {
     CONFIG_WII("config_wii"),
     CONFIG_ACHIEVEMENTS("config_achievements"),
     CONFIG_ADVANCED("config_advanced"),
+    // Fork: the MKWii launcher's lobby and voice chat.
+    CONFIG_LOBBY("config_lobby"),
     CONFIG_LOG("config_log"),
     DEBUG("debug"),
     GRAPHICS("graphics"),
