@@ -1059,6 +1059,7 @@ It can efficiently compress both junk data and encrypted Wii data.
     <string name="voice_people">In the lobby</string>
     <string name="voice_nobody_here">Nobody else is here yet.</string>
     <string name="voice_your_address">You are %1$s</string>
+    <string name="voice_no_microphone">Microphone unavailable — you can hear others but they cannot hear you. Check the app\'s Microphone permission, then restart the game.</string>
     <string name="lobby_failed_to_start">Could not start the lobby. Playing offline.\n\n%1$s</string>
     <string name="lobby_no_reply">No reply from the lobby host. Playing offline.\n\n%1$s</string>
 

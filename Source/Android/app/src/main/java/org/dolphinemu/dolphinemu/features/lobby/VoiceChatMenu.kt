@@ -101,7 +101,15 @@ object VoiceChatMenu {
         val handler = Handler(Looper.getMainLooper())
         val refresh = object : Runnable {
             override fun run() {
-                status.text = Lobby.voiceStatusText
+                // A microphone that never opened is the one failure that is
+                // invisible from this end - everyone else sounds fine and nobody
+                // mentions that you are silent - so it is called out here.
+                status.text =
+                    if (Lobby.isVoiceRunning && !Lobby.isVoiceCaptureWorking) {
+                        activity.getString(R.string.voice_no_microphone)
+                    } else {
+                        Lobby.voiceStatusText
+                    }
                 val address = Lobby.localAddress
                 localAddress.visibility = if (address.isEmpty()) View.GONE else View.VISIBLE
                 localAddress.text = activity.getString(R.string.voice_your_address, address)

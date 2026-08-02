@@ -12,6 +12,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.preference.PreferenceManager
 import org.dolphinemu.dolphinemu.NativeLibrary
 import org.dolphinemu.dolphinemu.activities.EmulationActivity
+import org.dolphinemu.dolphinemu.features.settings.model.BooleanSetting
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -22,6 +23,17 @@ object StartupHandler {
     fun HandleInit(parent: FragmentActivity) {
         // Ask the user if he wants to enable analytics if we haven't yet.
         Analytics.checkAnalyticsInit(parent)
+
+        // Fork: the microphone, asked for here rather than when voice chat starts.
+        // By then the console is booting and cubeb is about to open the device, so
+        // a grant arriving afterwards would not take effect until the next launch -
+        // which looks like a microphone that simply does not work. Asked on the
+        // game list instead, where there is time to answer before anything boots.
+        if (BooleanSetting.MAIN_VOICE_ENABLED.boolean &&
+            !PermissionsHandler.hasRecordAudioPermission(parent)
+        ) {
+            PermissionsHandler.requestRecordAudioPermission(parent)
+        }
 
         // Set up and/or sync Android TV channels
         if (TvUtil.isLeanback(parent)) {
