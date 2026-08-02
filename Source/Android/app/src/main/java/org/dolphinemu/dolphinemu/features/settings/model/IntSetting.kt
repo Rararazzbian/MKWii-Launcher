@@ -31,7 +31,9 @@ enum class IntSetting(
     MAIN_SI_DEVICE_1(Settings.FILE_DOLPHIN, Settings.SECTION_INI_CORE, "SIDevice1", 0),
     MAIN_SI_DEVICE_2(Settings.FILE_DOLPHIN, Settings.SECTION_INI_CORE, "SIDevice2", 0),
     MAIN_SI_DEVICE_3(Settings.FILE_DOLPHIN, Settings.SECTION_INI_CORE, "SIDevice3", 0),
-    MAIN_AUDIO_VOLUME(Settings.FILE_DOLPHIN, Settings.SECTION_INI_DSP, "Volume", 100),
+    // Fork: 25, matching the C++ default. The two are separate copies of the
+    // same number, so a change to one that misses the other is invisible.
+    MAIN_AUDIO_VOLUME(Settings.FILE_DOLPHIN, Settings.SECTION_INI_DSP, "Volume", 25),
     MAIN_AUDIO_BUFFER_SIZE(Settings.FILE_DOLPHIN, Settings.SECTION_INI_DSP, "AudioBufferSize", 80),
     MAIN_OVERLAY_GC_CONTROLLER(
         Settings.FILE_DOLPHIN,

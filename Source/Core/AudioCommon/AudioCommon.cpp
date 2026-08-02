@@ -3,6 +3,8 @@
 
 #include "AudioCommon/AudioCommon.h"
 
+#include <optional>
+
 #include <fmt/chrono.h>
 #include <fmt/format.h>
 
@@ -14,6 +16,7 @@
 #include "AudioCommon/OpenSLESStream.h"
 #include "AudioCommon/PulseAudioStream.h"
 #include "AudioCommon/WASAPIStream.h"
+#include "Common/Config/Config.h"
 #include "Common/FileUtil.h"
 #include "Common/Logging/Log.h"
 #include "Common/TimeUtil.h"
@@ -23,6 +26,12 @@
 
 namespace AudioCommon
 {
+namespace
+{
+// Held so the callback can be dropped when the stream goes away; it captures the
+// system it was registered for.
+std::optional<Config::ConfigChangedCallbackID> s_config_callback_id;
+}  // namespace
 constexpr int AUDIO_VOLUME_MIN = 0;
 constexpr int AUDIO_VOLUME_MAX = 100;
 
@@ -75,6 +84,15 @@ void PostInitSoundStream(Core::System& system)
   UpdateSoundStream(system);
   SetSoundStreamRunning(system, true);
 
+  // Fork: apply the volume whenever it changes, wherever it was changed from.
+  //
+  // Upstream only calls UpdateSoundStream from DolphinQt - the volume slider and
+  // two hotkeys - so on a frontend that has neither, the setting is written and
+  // nothing ever reads it back. That is a silent no-op rather than a missing
+  // control: the slider moves and the game stays exactly as loud.
+  s_config_callback_id = Config::AddConfigChangedCallback(
+      [&system] { UpdateSoundStream(system); });
+
   if (Config::Get(Config::MAIN_DUMP_AUDIO) && !system.IsAudioDumpStarted())
     StartAudioDump(system);
 }
@@ -85,6 +103,12 @@ void ShutdownSoundStream(Core::System& system)
 
   if (Config::Get(Config::MAIN_DUMP_AUDIO) && system.IsAudioDumpStarted())
     StopAudioDump(system);
+
+  if (s_config_callback_id)
+  {
+    Config::RemoveConfigChangedCallback(*s_config_callback_id);
+    s_config_callback_id.reset();
+  }
 
   SetSoundStreamRunning(system, false);
   system.SetSoundStream(nullptr);
