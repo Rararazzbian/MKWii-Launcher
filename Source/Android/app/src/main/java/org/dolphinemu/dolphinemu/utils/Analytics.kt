@@ -16,13 +16,20 @@ object Analytics {
     private const val DEVICE_MODEL = "DEVICE_MODEL"
     private const val DEVICE_TYPE = "DEVICE_TYPE"
 
+    /**
+     * Fork: does nothing.
+     *
+     * The build sets ENABLE_ANALYTICS OFF unconditionally, so AnalyticsReporter
+     * compiles to nothing and there is no code left that could report anything.
+     * Asking permission for it would be asking to enable something the binary
+     * cannot do - and a launcher for a private group should not open with a
+     * dialog about phoning home at all.
+     *
+     * Kept as an empty function rather than deleted so the two call sites, in
+     * StartupHandler and UserDataActivity, stay as they are upstream.
+     */
     @JvmStatic
     fun checkAnalyticsInit(activity: FragmentActivity) {
-        AfterDirectoryInitializationRunner().runWithLifecycle(activity) {
-            if (!BooleanSetting.MAIN_ANALYTICS_PERMISSION_ASKED.boolean) {
-                AnalyticsDialog().show(activity.supportFragmentManager, AnalyticsDialog.TAG)
-            }
-        }
     }
 
     fun firstAnalyticsAdd(enabled: Boolean) {

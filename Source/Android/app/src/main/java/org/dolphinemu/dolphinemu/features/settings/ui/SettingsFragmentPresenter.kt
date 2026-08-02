@@ -269,24 +269,9 @@ class SettingsFragmentPresenter(
                 R.array.regionValues
             )
         )
-        sl.add(
-            SwitchSetting(
-                context,
-                BooleanSetting.MAIN_ANALYTICS_ENABLED,
-                R.string.analytics,
-                0
-            )
-        )
-        sl.add(
-            RunRunnable(
-                context,
-                R.string.analytics_new_id,
-                0,
-                R.string.analytics_new_id_confirmation,
-                0,
-                true
-            ) { NativeLibrary.GenerateNewStatisticsId() }
-        )
+        // Fork: no analytics toggle and no "generate new ID". Analytics are
+        // compiled out rather than merely defaulted off, so a switch here would
+        // offer to enable something that is not in the binary.
         sl.add(
             SwitchSetting(
                 context,
