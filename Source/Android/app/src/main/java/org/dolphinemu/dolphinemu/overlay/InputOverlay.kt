@@ -69,14 +69,6 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
         if (!preferences.getBoolean("OverlayInitV3", false))
             defaultOverlay()
 
-        // Fork: a key of its own rather than bumping OverlayInitV3, so that anyone
-        // already past that one still gets a sensible first placement for the voice
-        // buttons instead of both of them stacked in the corner at 0,0.
-        if (!preferences.getBoolean("VoiceOverlayInitV2", false)) {
-            voiceDefaultOverlay("")
-            voiceDefaultOverlay("-Portrait")
-            preferences.edit().putBoolean("VoiceOverlayInitV2", true).apply()
-        }
 
         // Set the on touch listener.
         setOnTouchListener(this)
@@ -1093,6 +1085,21 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
      * overlay buttons otherwise - dragged, scaled and faded with everything else.
      */
     private fun addVoiceOverlayControls(orientation: String) {
+        // First placement, seeded here rather than in init because working out
+        // where these go needs the control scale, and reading a setting means
+        // reading Dolphin.ini - which is not loaded yet when the view is built.
+        // By the time controls are being refreshed it is, which is why every
+        // other setting on this path can be read too.
+        //
+        // A key of its own rather than bumping OverlayInitV3, so anyone already
+        // past that still gets a first placement instead of three buttons stacked
+        // in the corner at 0,0.
+        if (!preferences.getBoolean("VoiceOverlayInitV2", false)) {
+            voiceDefaultOverlay("")
+            voiceDefaultOverlay("-Portrait")
+            preferences.edit().putBoolean("VoiceOverlayInitV2", true).apply()
+        }
+
         if (!BooleanSetting.MAIN_VOICE_ENABLED.boolean) return
 
         // Opens the voice panel over the running game. Unlike the two toggles it

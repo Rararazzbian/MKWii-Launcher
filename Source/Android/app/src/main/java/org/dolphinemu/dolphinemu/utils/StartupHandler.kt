@@ -29,10 +29,16 @@ object StartupHandler {
         // a grant arriving afterwards would not take effect until the next launch -
         // which looks like a microphone that simply does not work. Asked on the
         // game list instead, where there is time to answer before anything boots.
-        if (BooleanSetting.MAIN_VOICE_ENABLED.boolean &&
-            !PermissionsHandler.hasRecordAudioPermission(parent)
-        ) {
-            PermissionsHandler.requestRecordAudioPermission(parent)
+        //
+        // Behind AfterDirectoryInitializationRunner because reading a setting is
+        // reading Dolphin.ini, and the config is not loaded when this is called.
+        // Doing it directly takes the process down before the game list appears.
+        AfterDirectoryInitializationRunner().runWithLifecycle(parent) {
+            if (BooleanSetting.MAIN_VOICE_ENABLED.boolean &&
+                !PermissionsHandler.hasRecordAudioPermission(parent)
+            ) {
+                PermissionsHandler.requestRecordAudioPermission(parent)
+            }
         }
 
         // Set up and/or sync Android TV channels
