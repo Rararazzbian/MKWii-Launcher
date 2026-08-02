@@ -13,6 +13,8 @@ Source/Core/Common/scmrev.h
 /obj/
 # Ignore files output by Android cmake build
 /Source/Android/app/.cxx/
+# Ignore the Kotlin compiler daemon's session files
+/Source/Android/.kotlin/
 /libs/
 # Ignore various files created by visual studio/msbuild
 *.ipch
