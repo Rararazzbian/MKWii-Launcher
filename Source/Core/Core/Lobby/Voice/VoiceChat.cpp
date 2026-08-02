@@ -553,18 +553,20 @@ void UpdateProximity(float dt)
     peer.have_distance = true;
 
     // Which ear. The listener's forward vector is the local +Z axis in world
-    // space, so its right is (fwd_z, -fwd_x) on the horizontal plane - the same
-    // vector turned a quarter turn. Projecting the direction to the other kart
-    // onto that gives -1 for hard left through to +1 for hard right, and the
-    // sign is what decides the side, so it is the one thing here worth being
-    // careful about.
+    // space, and its right is that turned a quarter turn on the horizontal
+    // plane. Which of the two quarter turns is a question about the game's
+    // handedness, not about the maths: (fwd_z, -fwd_x) put voices in the wrong
+    // ear when tested, so it is (-fwd_z, fwd_x).
+    //
+    // Projecting the direction to the other kart onto that gives -1 for hard
+    // left through to +1 for hard right.
     float pan_target = 0.0f;
     const float facing = std::sqrt(mine->fwd_x * mine->fwd_x + mine->fwd_z * mine->fwd_z);
     const float flat = std::sqrt(dx * dx + dz * dz);
     if (facing > 0.0001f && flat > 0.0001f)
     {
-      const float right_x = mine->fwd_z / facing;
-      const float right_z = -mine->fwd_x / facing;
+      const float right_x = -mine->fwd_z / facing;
+      const float right_z = mine->fwd_x / facing;
       pan_target = std::clamp((dx * right_x + dz * right_z) / flat, -1.0f, 1.0f);
 
       // Someone almost on top of you has no direction worth speaking of, and
