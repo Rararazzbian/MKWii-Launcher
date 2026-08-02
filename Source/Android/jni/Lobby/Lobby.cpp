@@ -14,7 +14,10 @@
 // Stop() here are the whole contract, and a frontend that calls them in the
 // wrong order gets a console with no network rather than an obvious failure.
 
+#include <mutex>
+#include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <jni.h>
@@ -41,6 +44,25 @@ constexpr jint RESULT_NOT_CONFIGURED = 1;
 constexpr jint RESULT_START_FAILED = 2;
 // Started, but the host never answered the handshake.
 constexpr jint RESULT_NO_REPLY = 3;
+
+// The voice panel's peer list, read as one snapshot rather than a call per
+// column. Peers come and go on the lobby thread, so six independent calls could
+// each see a different set and hand back arrays of different lengths for what is
+// meant to be one table.
+std::mutex s_snapshot_mutex;
+std::vector<Lobby::Voice::PeerInfo> s_snapshot;
+
+// Pulls one field out of the snapshot into a flat array, under the lock.
+template <typename T, typename F>
+std::vector<T> MapSnapshot(F&& field)
+{
+  std::lock_guard lock(s_snapshot_mutex);
+  std::vector<T> out;
+  out.reserve(s_snapshot.size());
+  for (const Lobby::Voice::PeerInfo& peer : s_snapshot)
+    out.push_back(field(peer));
+  return out;
+}
 }  // namespace
 
 extern "C" {
@@ -237,5 +259,107 @@ Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeIsVoiceDeafened(JNIEnv
 // backend does not implement enumerate_devices, so there is nothing to list and
 // a stored device id would never match. Both fall back to the system default,
 // which is what phones give you anyway. Deliberately not bridged.
+
+// Takes the snapshot the accessors below read from. Returns how many peers it
+// holds, which is the length every one of them will return until this is called
+// again.
+JNIEXPORT jint JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeVoicePeerSnapshot(JNIEnv*, jclass)
+{
+  std::vector<Lobby::Voice::PeerInfo> peers = Lobby::Voice::GetPeers();
+  std::lock_guard lock(s_snapshot_mutex);
+  s_snapshot = std::move(peers);
+  return static_cast<jint>(s_snapshot.size());
+}
+
+// "nickname (licence)", or just the nickname until the licence is known.
+JNIEXPORT jobjectArray JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeVoicePeerDisplays(JNIEnv* env, jclass)
+{
+  const auto values = MapSnapshot<std::string>([](const auto& p) { return p.display; });
+  return SpanToJStringArray(env, std::span<const std::string>(values));
+}
+
+// The key volumes are stored against, not for display.
+JNIEXPORT jobjectArray JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeVoicePeerNicknames(JNIEnv* env, jclass)
+{
+  const auto values = MapSnapshot<std::string>([](const auto& p) { return p.nickname; });
+  return SpanToJStringArray(env, std::span<const std::string>(values));
+}
+
+// 0-100. Meaningless for the local entry.
+JNIEXPORT jintArray JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeVoicePeerVolumes(JNIEnv* env, jclass)
+{
+  const auto values = MapSnapshot<jint>([](const auto& p) { return static_cast<jint>(p.volume); });
+  const auto size = static_cast<jsize>(values.size());
+  jintArray result = env->NewIntArray(size);
+  env->SetIntArrayRegion(result, 0, size, values.data());
+  return result;
+}
+
+// 0-1, for the meter beside each name.
+JNIEXPORT jfloatArray JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeVoicePeerLevels(JNIEnv* env, jclass)
+{
+  const auto values = MapSnapshot<jfloat>([](const auto& p) { return static_cast<jfloat>(p.level); });
+  const auto size = static_cast<jsize>(values.size());
+  jfloatArray result = env->NewFloatArray(size);
+  env->SetFloatArrayRegion(result, 0, size, values.data());
+  return result;
+}
+
+// Bit 0: this console. Bit 1: talking. Bit 2: proximity is being applied.
+// Packed rather than three more arrays - they are only ever read together, and
+// each extra accessor is another chance for the lengths to drift apart.
+JNIEXPORT jintArray JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeVoicePeerFlags(JNIEnv* env, jclass)
+{
+  const auto values = MapSnapshot<jint>([](const auto& p) {
+    return static_cast<jint>((p.is_local ? 1 : 0) | (p.talking ? 2 : 0) | (p.proximity ? 4 : 0));
+  });
+  const auto size = static_cast<jsize>(values.size());
+  jintArray result = env->NewIntArray(size);
+  env->SetIntArrayRegion(result, 0, size, values.data());
+  return result;
+}
+
+JNIEXPORT void JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeSetPeerVolume(JNIEnv* env, jclass,
+                                                                       jstring nickname,
+                                                                       jint percent)
+{
+  Lobby::Voice::SetPeerVolume(GetJString(env, nickname), percent);
+}
+
+// Master volume and microphone gain, 0-200 percent. These go through
+// VoiceSettings for the same reason mute and deafen do - it holds the copy the
+// audio threads actually read - which is also what makes them safe to change
+// from here while a race is running.
+JNIEXPORT void JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeSetMasterVolume(JNIEnv*, jclass,
+                                                                         jint percent)
+{
+  Lobby::Voice::SetMasterVolume(percent);
+}
+
+JNIEXPORT jint JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeGetMasterVolume(JNIEnv*, jclass)
+{
+  return static_cast<jint>(Lobby::Voice::Get().master_volume);
+}
+
+JNIEXPORT void JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeSetMicGain(JNIEnv*, jclass, jint percent)
+{
+  Lobby::Voice::SetMicGain(percent);
+}
+
+JNIEXPORT jint JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeGetMicGain(JNIEnv*, jclass)
+{
+  return static_cast<jint>(Lobby::Voice::Get().mic_gain);
+}
 
 }  // extern "C"

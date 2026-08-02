@@ -2,7 +2,7 @@
 <resources>
 
     <!-- Title of the app -->
-    <string name="app_name">Dolphin Emulator</string>
+    <string name="app_name">Mario Kart Wii VC</string>
     <string name="host">app</string>
     <string name="scheme">dolphinemu</string>
 
@@ -1049,4 +1049,14 @@ It can efficiently compress both junk data and encrypted Wii data.
     <string name="netplay_address_share">Share address</string>
     <string name="netplay_address_retry">Retry</string>
     <string name="netplay_transfer_progress">%1$s/%2$s MiB</string>
+
+    <!-- Fork: the MKWii launcher's voice chat. -->
+    <string name="voice_chat">Voice chat</string>
+    <string name="voice_mute">Mute</string>
+    <string name="voice_deafen">Deafen</string>
+    <string name="voice_master_volume">Master volume</string>
+    <string name="voice_mic_gain">Microphone gain</string>
+    <string name="voice_people">In the lobby</string>
+    <string name="voice_nobody_here">Nobody else is here yet.</string>
+    <string name="voice_your_address">You are %1$s</string>
 </resources>

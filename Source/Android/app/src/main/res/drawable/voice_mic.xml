@@ -1,7 +1,8 @@
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
-<!-- Voice chat: microphone live. Overlay button, drawn over the game, so the
-     colours are fixed rather than theme attributes - the overlay's own opacity
-     setting is applied to the bitmap afterwards. -->
+<!-- Voice chat: microphone live.
+     Shaped to match the controller buttons next to it - a near-white face with a
+     black glyph, on a square canvas with room around it. The overlay applies its
+     own opacity afterwards, which is where the translucency comes from. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="96dp"
     android:height="96dp"
@@ -9,29 +10,28 @@
     android:viewportHeight="24">
 
     <path
-        android:fillColor="#000000"
-        android:fillAlpha="0.45"
-        android:pathData="M12,1a11,11 0 1 1 0,22a11,11 0 1 1 0,-22z" />
+        android:fillColor="#FAFAFA"
+        android:pathData="M12,1.5a10.5,10.5 0 1 1 0,21a10.5,10.5 0 1 1 0,-21z" />
 
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M9,6a3,3 0 0 1 6,0v4a3,3 0 0 1 -6,0z" />
+        android:fillColor="#0A0A0A"
+        android:pathData="M12,4.2a2.7,2.7 0 0 1 2.7,2.7v4.6a2.7,2.7 0 0 1 -5.4,0v-4.6a2.7,2.7 0 0 1 2.7,-2.7z" />
 
     <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="1.6"
+        android:strokeColor="#0A0A0A"
+        android:strokeWidth="1.5"
         android:strokeLineCap="round"
-        android:pathData="M7,11a5,5 0 0 0 10,0" />
+        android:pathData="M7.2,11.2a4.8,4.8 0 0 0 9.6,0" />
 
     <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="1.6"
+        android:strokeColor="#0A0A0A"
+        android:strokeWidth="1.5"
         android:strokeLineCap="round"
-        android:pathData="M12,16v3" />
+        android:pathData="M12,16v3.2" />
 
     <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="1.6"
+        android:strokeColor="#0A0A0A"
+        android:strokeWidth="1.5"
         android:strokeLineCap="round"
-        android:pathData="M9,19h6" />
+        android:pathData="M8.9,19.2h6.2" />
 </vector>

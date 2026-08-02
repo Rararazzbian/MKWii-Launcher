@@ -96,6 +96,71 @@ object Lobby {
         get() = nativeIsVoiceDeafened()
         set(value) = nativeSetVoiceDeafened(value)
 
+    /**
+     * One person in the voice channel.
+     *
+     * @param display    "nickname (licence)", or just the nickname until their
+     *                   licence is known. For showing.
+     * @param nickname   What their volume is stored against. For [setPeerVolume].
+     * @param volume     0-100. Meaningless for the local entry.
+     * @param level      0-1, for a meter beside their name.
+     * @param isLocal    True for this device's own entry.
+     * @param isTalking  Whether they are speaking right now.
+     * @param proximity  Whether distance is being applied to them right now, which
+     *                   only happens while both of you are in an online race.
+     */
+    data class VoicePeer(
+        val display: String,
+        val nickname: String,
+        val volume: Int,
+        val level: Float,
+        val isLocal: Boolean,
+        val isTalking: Boolean,
+        val proximity: Boolean
+    )
+
+    /**
+     * Everyone in the voice channel, this device included.
+     *
+     * Taken as one snapshot rather than a call per column: peers come and go on
+     * the lobby thread, so reading each column separately could produce a table
+     * whose rows do not line up.
+     */
+    val voicePeers: List<VoicePeer>
+        get() {
+            val count = nativeVoicePeerSnapshot()
+            if (count == 0) return emptyList()
+            val displays = nativeVoicePeerDisplays()
+            val nicknames = nativeVoicePeerNicknames()
+            val volumes = nativeVoicePeerVolumes()
+            val levels = nativeVoicePeerLevels()
+            val flags = nativeVoicePeerFlags()
+            return (0 until count).map {
+                VoicePeer(
+                    displays[it],
+                    nicknames[it],
+                    volumes[it],
+                    levels[it],
+                    flags[it] and 1 != 0,
+                    flags[it] and 2 != 0,
+                    flags[it] and 4 != 0
+                )
+            }
+        }
+
+    /** How loudly one person is heard, 0-100. Keyed by [VoicePeer.nickname]. */
+    fun setPeerVolume(nickname: String, percent: Int) = nativeSetPeerVolume(nickname, percent)
+
+    /** Percent, 0-200. 100 is unity. Safe to change mid-race. */
+    var masterVolume: Int
+        get() = nativeGetMasterVolume()
+        set(value) = nativeSetMasterVolume(value)
+
+    /** Percent, 0-200. 100 is unity. Safe to change mid-race. */
+    var micGain: Int
+        get() = nativeGetMicGain()
+        set(value) = nativeSetMicGain(value)
+
     @JvmStatic
     private external fun nativeStart(): Int
 
@@ -149,4 +214,37 @@ object Lobby {
 
     @JvmStatic
     private external fun nativeIsVoiceDeafened(): Boolean
+
+    @JvmStatic
+    private external fun nativeVoicePeerSnapshot(): Int
+
+    @JvmStatic
+    private external fun nativeVoicePeerDisplays(): Array<String>
+
+    @JvmStatic
+    private external fun nativeVoicePeerNicknames(): Array<String>
+
+    @JvmStatic
+    private external fun nativeVoicePeerVolumes(): IntArray
+
+    @JvmStatic
+    private external fun nativeVoicePeerLevels(): FloatArray
+
+    @JvmStatic
+    private external fun nativeVoicePeerFlags(): IntArray
+
+    @JvmStatic
+    private external fun nativeSetPeerVolume(nickname: String, percent: Int)
+
+    @JvmStatic
+    private external fun nativeSetMasterVolume(percent: Int)
+
+    @JvmStatic
+    private external fun nativeGetMasterVolume(): Int
+
+    @JvmStatic
+    private external fun nativeSetMicGain(percent: Int)
+
+    @JvmStatic
+    private external fun nativeGetMicGain(): Int
 }

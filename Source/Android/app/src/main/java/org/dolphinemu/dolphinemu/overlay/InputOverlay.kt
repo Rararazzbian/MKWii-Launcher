@@ -28,6 +28,7 @@ import org.dolphinemu.dolphinemu.features.input.model.InputOverrider
 import org.dolphinemu.dolphinemu.features.input.model.InputOverrider.ControlId
 import org.dolphinemu.dolphinemu.features.input.model.controlleremu.EmulatedController
 import org.dolphinemu.dolphinemu.features.lobby.Lobby
+import org.dolphinemu.dolphinemu.features.lobby.VoiceChatMenu
 import org.dolphinemu.dolphinemu.features.settings.model.BooleanSetting
 import org.dolphinemu.dolphinemu.features.settings.model.IntSetting
 import org.dolphinemu.dolphinemu.features.settings.model.IntSetting.Companion.getSettingForSIDevice
@@ -1094,6 +1095,23 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
     private fun addVoiceOverlayControls(orientation: String) {
         if (!BooleanSetting.MAIN_VOICE_ENABLED.boolean) return
 
+        // Opens the voice panel over the running game. Unlike the two toggles it
+        // holds no state of its own, so its action reports false and it draws in
+        // the default face as soon as the finger comes up.
+        overlayButtons.add(
+            initializeVoiceButton(
+                context,
+                R.drawable.voice_menu,
+                R.drawable.voice_menu_pressed,
+                ButtonType.VOICE_MENU,
+                orientation,
+                0.13f
+            ) {
+                (context as? Activity)?.let { VoiceChatMenu.show(it) }
+                false
+            }
+        )
+
         // Deafening stops sending as well as receiving, so the microphone is not
         // live while deafened even though mute itself is still off. The button
         // shows whether anyone can hear you, which is the question being asked of
@@ -1105,7 +1123,8 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
             R.drawable.voice_mic,
             R.drawable.voice_mic_muted,
             ButtonType.VOICE_MUTE,
-            orientation
+            orientation,
+            0.09f
         ) {
             // Tapping while deafened un-deafens too. Otherwise the button appears
             // stuck: it is drawn silent, tapping it changes nothing visible, and
@@ -1126,7 +1145,8 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
             R.drawable.voice_headphones,
             R.drawable.voice_headphones_deafened,
             ButtonType.VOICE_DEAFEN,
-            orientation
+            orientation,
+            0.09f
         ) {
             Lobby.isVoiceDeafened = !Lobby.isVoiceDeafened
             // The microphone goes silent with it, so redraw that button too.
@@ -1200,10 +1220,12 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
         // Per mille of the screen, matching the integers the rest of the overlay
         // defaults are stored as.
         preferences.edit()
-            .putFloat(ButtonType.VOICE_MUTE.toString() + orientation + "-X", 0.020f * maxX)
-            .putFloat(ButtonType.VOICE_MUTE.toString() + orientation + "-Y", 0.030f * maxY)
-            .putFloat(ButtonType.VOICE_DEAFEN.toString() + orientation + "-X", 0.115f * maxX)
-            .putFloat(ButtonType.VOICE_DEAFEN.toString() + orientation + "-Y", 0.030f * maxY)
+            .putFloat(ButtonType.VOICE_MENU.toString() + orientation + "-X", 0.015f * maxX)
+            .putFloat(ButtonType.VOICE_MENU.toString() + orientation + "-Y", 0.025f * maxY)
+            .putFloat(ButtonType.VOICE_MUTE.toString() + orientation + "-X", 0.165f * maxX)
+            .putFloat(ButtonType.VOICE_MUTE.toString() + orientation + "-Y", 0.025f * maxY)
+            .putFloat(ButtonType.VOICE_DEAFEN.toString() + orientation + "-X", 0.265f * maxX)
+            .putFloat(ButtonType.VOICE_DEAFEN.toString() + orientation + "-Y", 0.025f * maxY)
             .apply()
     }
 
@@ -1259,9 +1281,10 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
         pressedResId: Int,
         legacyId: Int,
         orientation: String,
+        baseScale: Float,
         action: () -> Boolean
     ): InputOverlayDrawableButton {
-        var scale = 0.09f
+        var scale = baseScale
         scale *= (IntSetting.MAIN_CONTROL_SCALE.int + 50).toFloat()
         scale /= 100f
 

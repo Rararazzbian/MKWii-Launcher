@@ -202,6 +202,7 @@ object NativeLibrary {
         // not controller inputs - they only ever identify a button's saved
         // position - so they sit well clear of the ranges above to leave room for
         // upstream to keep growing.
+        const val VOICE_MENU = 899
         const val VOICE_MUTE = 900
         const val VOICE_DEAFEN = 901
     }

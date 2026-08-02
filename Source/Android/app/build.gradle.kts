@@ -36,7 +36,20 @@ android {
     }
 
     defaultConfig {
-        applicationId = "org.dolphinemu.dolphinemu"
+        // Fork: a package of its own, so this installs alongside a stock Dolphin
+        // rather than replacing it.
+        //
+        // This is also what keeps the two apps' data apart. Android hands each
+        // package its own /Android/data/<applicationId>/files, which is what
+        // DirectoryInitialization passes to SetUserDirectory, so the NAND, saves,
+        // configs and the lobby's logs all land somewhere Dolphin cannot see -
+        // the same isolation the desktop build gets from being portable.
+        //
+        // The Kotlin namespace below stays org.dolphinemu.dolphinemu: it is the
+        // package the sources and the R class live in, and renaming it would touch
+        // every file for no benefit. Manifest providers use ${applicationId}, so
+        // their authorities follow this rather than the namespace.
+        applicationId = "com.rararazzbian.mkwiivc"
         minSdk = 24
         targetSdk = 37
 
@@ -69,7 +82,7 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             }
 
-            resValue("string", "app_name_suffixed", "Dolphin Emulator")
+            resValue("string", "app_name_suffixed", "Mario Kart Wii VC")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -81,7 +94,7 @@ android {
         // Signed by debug key disallowing distribution on Play Store.
         // Attaches "debug" suffix to version and package name, allowing installation alongside the release build.
         debug {
-            resValue("string", "app_name_suffixed", "Dolphin Debug")
+            resValue("string", "app_name_suffixed", "MKWii VC Debug")
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             isJniDebuggable = true
