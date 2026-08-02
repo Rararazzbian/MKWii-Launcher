@@ -32,6 +32,14 @@ open class SwitchSetting : SettingsItem {
         booleanSetting = setting
     }
 
+    /**
+     * Fork: run after this switch is toggled, for a switch that changes which
+     * other settings make sense. Set it to rebuild the list and the ones that no
+     * longer apply can be left out of it entirely, rather than shown alongside
+     * their opposite with a note explaining when to ignore them.
+     */
+    var onChanged: (() -> Unit)? = null
+
     open val isChecked: Boolean
         get() = booleanSetting.boolean
 

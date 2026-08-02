@@ -154,6 +154,8 @@ class SettingsAdapter(
     fun onBooleanClick(item: SwitchSetting, checked: Boolean) {
         item.setChecked(settings!!, checked)
         fragmentView.onSettingChanged()
+        // Fork: for a switch that decides which other settings are worth showing.
+        item.onChanged?.invoke()
     }
 
     fun onInputStringClick(item: InputStringSetting, position: Int) {

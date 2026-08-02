@@ -72,10 +72,10 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
         // Fork: a key of its own rather than bumping OverlayInitV3, so that anyone
         // already past that one still gets a sensible first placement for the voice
         // buttons instead of both of them stacked in the corner at 0,0.
-        if (!preferences.getBoolean("VoiceOverlayInit", false)) {
+        if (!preferences.getBoolean("VoiceOverlayInitV2", false)) {
             voiceDefaultOverlay("")
             voiceDefaultOverlay("-Portrait")
-            preferences.edit().putBoolean("VoiceOverlayInit", true).apply()
+            preferences.edit().putBoolean("VoiceOverlayInitV2", true).apply()
         }
 
         // Set the on touch listener.
@@ -1105,7 +1105,7 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
                 R.drawable.voice_menu_pressed,
                 ButtonType.VOICE_MENU,
                 orientation,
-                0.13f
+                VOICE_MENU_SCALE
             ) {
                 (context as? Activity)?.let { VoiceChatMenu.show(it) }
                 false
@@ -1124,7 +1124,7 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
             R.drawable.voice_mic_muted,
             ButtonType.VOICE_MUTE,
             orientation,
-            0.09f
+            VOICE_TOGGLE_SCALE
         ) {
             // Tapping while deafened un-deafens too. Otherwise the button appears
             // stuck: it is drawn silent, tapping it changes nothing visible, and
@@ -1146,7 +1146,7 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
             R.drawable.voice_headphones_deafened,
             ButtonType.VOICE_DEAFEN,
             orientation,
-            0.09f
+            VOICE_TOGGLE_SCALE
         ) {
             Lobby.isVoiceDeafened = !Lobby.isVoiceDeafened
             // The microphone goes silent with it, so redraw that button too.
@@ -1217,15 +1217,52 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
             maxY = tmp
         }
 
-        // Per mille of the screen, matching the integers the rest of the overlay
-        // defaults are stored as.
+        // Laid out from the sizes the buttons will actually be rather than from
+        // guessed percentages, because the three are not the same size and a
+        // percentage that suits one leaves the others scattered.
+        //
+        // Two things make this work. resizeBitmap gives every button a square
+        // whose side is its scale times the smaller screen dimension, so the
+        // sizes are known here. And every glyph is centred in its own 24x24
+        // viewport, so lining up the squares' centres lines up what is drawn -
+        // which lining up their top edges does not, since a stadium is shorter
+        // than a circle of the same square.
+        val scaleFactor = (IntSetting.MAIN_CONTROL_SCALE.int + 50) / 100f
+        val minDimension = outMetrics.widthPixels.coerceAtMost(outMetrics.heightPixels)
+        val menuSize = VOICE_MENU_SCALE * scaleFactor * minDimension
+        val toggleSize = VOICE_TOGGLE_SCALE * scaleFactor * minDimension
+
+        // How much clear space each glyph leaves inside its square, as a fraction
+        // of the side: the stadium runs the full width, the circles do not.
+        val toggleInset = 0.0625f * toggleSize
+        val toggleVisibleWidth = 0.875f * toggleSize
+
+        val gap = 0.32f * toggleSize
+        val centreY = 0.035f * maxY + menuSize.coerceAtLeast(toggleSize) / 2f
+
+        val menuX = 0.018f * maxX
+        val muteVisibleLeft = menuX + menuSize + gap
+        val deafenVisibleLeft = muteVisibleLeft + toggleVisibleWidth + gap
+
         preferences.edit()
-            .putFloat(ButtonType.VOICE_MENU.toString() + orientation + "-X", 0.015f * maxX)
-            .putFloat(ButtonType.VOICE_MENU.toString() + orientation + "-Y", 0.025f * maxY)
-            .putFloat(ButtonType.VOICE_MUTE.toString() + orientation + "-X", 0.165f * maxX)
-            .putFloat(ButtonType.VOICE_MUTE.toString() + orientation + "-Y", 0.025f * maxY)
-            .putFloat(ButtonType.VOICE_DEAFEN.toString() + orientation + "-X", 0.265f * maxX)
-            .putFloat(ButtonType.VOICE_DEAFEN.toString() + orientation + "-Y", 0.025f * maxY)
+            .putFloat(ButtonType.VOICE_MENU.toString() + orientation + "-X", menuX)
+            .putFloat(ButtonType.VOICE_MENU.toString() + orientation + "-Y", centreY - menuSize / 2f)
+            .putFloat(
+                ButtonType.VOICE_MUTE.toString() + orientation + "-X",
+                muteVisibleLeft - toggleInset
+            )
+            .putFloat(
+                ButtonType.VOICE_MUTE.toString() + orientation + "-Y",
+                centreY - toggleSize / 2f
+            )
+            .putFloat(
+                ButtonType.VOICE_DEAFEN.toString() + orientation + "-X",
+                deafenVisibleLeft - toggleInset
+            )
+            .putFloat(
+                ButtonType.VOICE_DEAFEN.toString() + orientation + "-Y",
+                centreY - toggleSize / 2f
+            )
             .apply()
     }
 
@@ -2466,6 +2503,13 @@ class InputOverlay(context: Context?, attrs: AttributeSet?) : SurfaceView(contex
     }
 
     companion object {
+        // Fork: the voice buttons' sizes, as a fraction of the smaller screen
+        // dimension before the user's control scale is applied. Shared so that
+        // voiceDefaultOverlay can lay them out from the same numbers the buttons
+        // are actually built with.
+        private const val VOICE_MENU_SCALE = 0.13f
+        private const val VOICE_TOGGLE_SCALE = 0.10f
+
         const val OVERLAY_GAMECUBE = 0
         const val OVERLAY_WIIMOTE = 1
         const val OVERLAY_WIIMOTE_SIDEWAYS = 2

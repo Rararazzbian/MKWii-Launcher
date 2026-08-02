@@ -1084,39 +1084,48 @@ class SettingsFragmentPresenter(
                 R.string.lobby_nickname_description
             )
         )
+        // Hosting and joining need different things, and showing both at once
+        // means two port fields on screen with only their descriptions to say
+        // which one is live. Only the relevant one is listed, and toggling this
+        // rebuilds the list.
+        val isHost = BooleanSetting.MAIN_LOBBY_IS_HOST.boolean
         sl.add(
             SwitchSetting(
                 context,
                 BooleanSetting.MAIN_LOBBY_IS_HOST,
                 R.string.lobby_is_host,
                 R.string.lobby_is_host_description
-            )
+            ).apply { onChanged = { loadSettingsList() } }
         )
-        sl.add(
-            InputStringSetting(
-                context,
-                StringSetting.MAIN_LOBBY_HOST_ADDRESS,
-                R.string.lobby_host_address,
-                R.string.lobby_host_address_description
+
+        if (isHost) {
+            // The port is an int in C++, but Config keeps every value as text in
+            // the ini and parses on read, so editing it as a string works and
+            // gives a numeric field rather than a slider nobody could drag to an
+            // exact port. Anything unparseable falls back to the default.
+            sl.add(
+                InputStringSetting(
+                    context,
+                    AdHocStringSetting(
+                        Settings.FILE_DOLPHIN,
+                        Settings.SECTION_INI_MKW_LAUNCHER,
+                        "LobbyPort",
+                        "7788"
+                    ),
+                    R.string.lobby_port,
+                    R.string.lobby_port_description
+                )
             )
-        )
-        // The port is an int in C++, but Config keeps every value as text in the
-        // ini and parses on read, so editing it as a string works and gives a
-        // numeric field instead of a slider nobody could drag to a exact port.
-        // Something unparseable falls back to the default rather than failing.
-        sl.add(
-            InputStringSetting(
-                context,
-                AdHocStringSetting(
-                    Settings.FILE_DOLPHIN,
-                    Settings.SECTION_INI_MKW_LAUNCHER,
-                    "LobbyPort",
-                    "7788"
-                ),
-                R.string.lobby_port,
-                R.string.lobby_port_description
+        } else {
+            sl.add(
+                InputStringSetting(
+                    context,
+                    StringSetting.MAIN_LOBBY_HOST_ADDRESS,
+                    R.string.lobby_host_address,
+                    R.string.lobby_host_address_description
+                )
             )
-        )
+        }
         sl.add(
             SwitchSetting(
                 context,

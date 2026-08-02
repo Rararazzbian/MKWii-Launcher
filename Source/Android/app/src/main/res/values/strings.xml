@@ -1067,11 +1067,11 @@ It can efficiently compress both junk data and encrypted Wii data.
     <string name="lobby_nickname">Nickname</string>
     <string name="lobby_nickname_description">How you appear to everyone else. Required.</string>
     <string name="lobby_is_host">Host the lobby</string>
-    <string name="lobby_is_host_description">Off if you are joining someone else\'s lobby.</string>
-    <string name="lobby_host_address">Host address</string>
-    <string name="lobby_host_address_description">Who to join, as an address or "address:port". Only used when not hosting.</string>
-    <string name="lobby_port">Port</string>
-    <string name="lobby_port_description">The port to host on, or to join if the address does not name one.</string>
+    <string name="lobby_is_host_description">On to run the lobby others join. Off to join someone else\'s.</string>
+    <string name="lobby_host_address">Connect to</string>
+    <string name="lobby_host_address_description">The host\'s address. Add :port only if they changed it, for example 192.168.1.20:7788.</string>
+    <string name="lobby_port">Listen on port</string>
+    <string name="lobby_port_description">The port others connect to. Leave at 7788 unless something else is using it.</string>
     <string name="lobby_voice_enabled">Voice chat</string>
     <string name="lobby_voice_enabled_description">Talk to the others in the lobby, positionally during a race.</string>
     <string name="lobby_net_trace">Log the virtual network</string>
