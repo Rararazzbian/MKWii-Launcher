@@ -113,6 +113,8 @@ class Settings : Closeable {
         const val SECTION_INI_DSP = "DSP"
         const val SECTION_INI_GBA = "GBA"
         const val SECTION_INI_NETPLAY = "NetPlay"
+        const val SECTION_INI_MKW_LAUNCHER = "MKWiiLauncher"
+        const val SECTION_INI_MKW_VOICE = "MKWiiVoice"
         const val SECTION_LOGGER_LOGS = "Logs"
         const val SECTION_LOGGER_OPTIONS = "Options"
         const val SECTION_GFX_HARDWARE = "Hardware"

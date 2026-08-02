@@ -117,7 +117,34 @@ enum class StringSetting(
     NETPLAY_ADDRESS(Settings.FILE_DOLPHIN, Settings.SECTION_INI_NETPLAY, "Address", "127.0.0.1"),
     NETPLAY_NICKNAME(Settings.FILE_DOLPHIN, Settings.SECTION_INI_NETPLAY, "Nickname", "Player"),
     NETPLAY_GAME(Settings.FILE_DOLPHIN, Settings.SECTION_INI_NETPLAY, "Game", ""),
-    NETPLAY_NETWORK_MODE(Settings.FILE_DOLPHIN, Settings.SECTION_INI_NETPLAY, "NetworkMode", "fixeddelay");
+    NETPLAY_NETWORK_MODE(Settings.FILE_DOLPHIN, Settings.SECTION_INI_NETPLAY, "NetworkMode", "fixeddelay"),
+
+    // Fork: the MKWii launcher's lobby.
+    //
+    // The microphone and voice output device settings are deliberately absent.
+    // cubeb's OpenSL backend - the one Android uses - does not implement
+    // enumerate_devices, so there is nothing to populate a picker with and a
+    // stored device id would never match anything. Both fall back to the system
+    // default, which is what a phone offers anyway.
+    MAIN_LOBBY_NICKNAME(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_LAUNCHER,
+        "Nickname",
+        ""
+    ),
+    MAIN_MKW_GAME_PATH(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_LAUNCHER,
+        "GamePath",
+        ""
+    ),
+    // "host" or "host:port". Only consulted when joining rather than hosting.
+    MAIN_LOBBY_HOST_ADDRESS(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_LAUNCHER,
+        "LobbyHost",
+        ""
+    );
 
     override val isOverridden: Boolean
         get() = NativeConfig.isOverridden(file, section, key)
@@ -150,7 +177,12 @@ enum class StringSetting(
     companion object {
         private val NOT_RUNTIME_EDITABLE_ARRAY = arrayOf(
             MAIN_CUSTOM_RTC_VALUE,
-            MAIN_GFX_BACKEND
+            MAIN_GFX_BACKEND,
+            // The lobby reads these once, when it starts. Changing one while a
+            // console is running would appear to do nothing until the next boot.
+            MAIN_LOBBY_NICKNAME,
+            MAIN_MKW_GAME_PATH,
+            MAIN_LOBBY_HOST_ADDRESS
         )
 
         private val NOT_RUNTIME_EDITABLE: Set<StringSetting> =

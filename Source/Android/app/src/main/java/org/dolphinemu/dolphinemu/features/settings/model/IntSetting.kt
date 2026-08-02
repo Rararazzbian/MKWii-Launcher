@@ -176,6 +176,46 @@ enum class IntSetting(
         Settings.SECTION_INI_NETPLAY,
         "BufferSize",
         5
+    ),
+
+    // Fork: the MKWii launcher's lobby and voice chat.
+    MAIN_LOBBY_PORT(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_LAUNCHER,
+        "LobbyPort",
+        7788
+    ),
+    MAIN_MEMINSPECT_WEB_PORT(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_LAUNCHER,
+        "MemInspectWebPort",
+        5000
+    ),
+    // Only the lobby host's bitrate is used; it is pushed to everyone else.
+    MAIN_VOICE_BITRATE(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_VOICE,
+        "Bitrate",
+        64000
+    ),
+    // Percent, 0-200. 100 is unity for all three.
+    MAIN_VOICE_MIC_GAIN(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_VOICE,
+        "MicGain",
+        100
+    ),
+    MAIN_VOICE_MASTER_VOLUME(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_VOICE,
+        "MasterVolume",
+        100
+    ),
+    MAIN_VOICE_DOPPLER(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_VOICE,
+        "Doppler",
+        100
     );
 
     override val isOverridden: Boolean
@@ -223,7 +263,16 @@ enum class IntSetting(
             MAIN_SLOT_A,
             MAIN_SLOT_B,
             MAIN_SERIAL_PORT_1,
-            MAIN_FALLBACK_REGION
+            MAIN_FALLBACK_REGION,
+            // The lobby reads these once, when it starts, and voice keeps a live
+            // copy of the rest that is refreshed only when it starts. Editing any
+            // of them while a console is running would appear to do nothing.
+            MAIN_LOBBY_PORT,
+            MAIN_MEMINSPECT_WEB_PORT,
+            MAIN_VOICE_BITRATE,
+            MAIN_VOICE_MIC_GAIN,
+            MAIN_VOICE_MASTER_VOLUME,
+            MAIN_VOICE_DOPPLER
         )
 
         private val NOT_RUNTIME_EDITABLE: Set<IntSetting> =

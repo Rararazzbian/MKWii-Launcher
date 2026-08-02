@@ -947,7 +947,51 @@ enum class BooleanSetting(
         "ProgressEnabled",
         false
     ),
-    NETPLAY_USE_UPNP(Settings.FILE_DOLPHIN, Settings.SECTION_INI_NETPLAY, "UseUPNP", false);
+    NETPLAY_USE_UPNP(Settings.FILE_DOLPHIN, Settings.SECTION_INI_NETPLAY, "UseUPNP", false),
+
+    // Fork: the MKWii launcher's lobby and voice chat.
+    //
+    // MAIN_VOICE_MUTED and MAIN_VOICE_DEAFENED are deliberately absent. They are
+    // the two voice settings meant to be changed mid-race, and VoiceSettings keeps
+    // a live copy that the audio threads read per frame - writing the ini here
+    // would leave that copy stale until the next time voice starts. They go
+    // through Lobby.isVoiceMuted / isVoiceDeafened instead, which write both.
+    MAIN_SETUP_WIZARD_COMPLETE(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_LAUNCHER,
+        "SetupComplete",
+        false
+    ),
+    MAIN_LOBBY_IS_HOST(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_LAUNCHER,
+        "IsHost",
+        true
+    ),
+    MAIN_LOBBY_NET_TRACE(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_LAUNCHER,
+        "NetTrace",
+        true
+    ),
+    MAIN_LOBBY_NET_TRACE_PAYLOADS(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_LAUNCHER,
+        "NetTracePayloads",
+        true
+    ),
+    MAIN_MEMINSPECT_WEB(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_LAUNCHER,
+        "MemInspectWeb",
+        true
+    ),
+    MAIN_VOICE_ENABLED(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_VOICE,
+        "Enabled",
+        true
+    );
 
     override val isOverridden: Boolean
         get() = NativeConfig.isOverridden(file, section, key)
@@ -1012,7 +1056,16 @@ enum class BooleanSetting(
             ACHIEVEMENTS_HARDCORE_ENABLED,
             ACHIEVEMENTS_UNOFFICIAL_ENABLED,
             ACHIEVEMENTS_ENCORE_ENABLED,
-            ACHIEVEMENTS_SPECTATOR_ENABLED
+            ACHIEVEMENTS_SPECTATOR_ENABLED,
+            // The lobby reads these once, when it starts, so changing one while a
+            // console is running would appear to do nothing until the next boot.
+            MAIN_SETUP_WIZARD_COMPLETE,
+            MAIN_LOBBY_IS_HOST,
+            MAIN_LOBBY_NET_TRACE,
+            MAIN_LOBBY_NET_TRACE_PAYLOADS,
+            MAIN_MEMINSPECT_WEB,
+            // Voice keeps a live copy of this, refreshed only when it starts.
+            MAIN_VOICE_ENABLED
         )
         private val NOT_RUNTIME_EDITABLE: Set<BooleanSetting> =
             HashSet(listOf(*NOT_RUNTIME_EDITABLE_ARRAY))

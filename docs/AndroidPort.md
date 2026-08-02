@@ -107,8 +107,17 @@ Every call that brings a lobby up lives in `DolphinQt/MainWindow.cpp` (around
   wired up yet: it has to come *after* the settings above, because until a nickname and
   host address can be configured, `start()` can only return `NOT_CONFIGURED`, and a boot
   path that refused on that would refuse every boot on Android.
-* **Settings** — 21 new `MAIN_LOBBY_*` / `MAIN_VOICE_*` entries to surface. These fit
-  Android's existing `BooleanSetting` / `StringSetting` enum pattern directly.
+* ~~**Settings**~~ — done. 17 of the fork's 21 `MAIN_LOBBY_*` / `MAIN_VOICE_*` entries are
+  in the `BooleanSetting` / `IntSetting` / `StringSetting` / `FloatSetting` enums. All are
+  marked not-runtime-editable, because the lobby reads its settings once when it starts and
+  voice keeps a live copy refreshed only when *it* starts — editing either mid-console would
+  appear to do nothing. `FloatSetting` had no not-runtime-editable mechanism, so it gained
+  one to match the other three. What is still missing is the UI to *show* them.
+
+  Four are deliberately not exposed. `MAIN_LOBBY_MICROPHONE` and `MAIN_VOICE_OUTPUT_DEVICE`
+  cannot work (§3). `MAIN_VOICE_MUTED` and `MAIN_VOICE_DEAFENED` are the two meant to be
+  changed mid-race, so they go through the JNI bridge, which updates the live copy as well
+  as the ini — writing the ini alone would be ignored until voice next started.
 
 ### 2. The voice panel is a redesign, not a port
 
