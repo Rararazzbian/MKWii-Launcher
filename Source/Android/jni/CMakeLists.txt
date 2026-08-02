@@ -30,6 +30,7 @@ add_library(main SHARED
   Input/MappingCommon.cpp
   Input/NumericSetting.cpp
   Input/NumericSetting.h
+  Lobby/Lobby.cpp
   NetPlay/Netplay.cpp
   NetPlay/NetPlayUICallbacks.cpp
   NetPlay/NetPlayUICallbacks.h
