@@ -40,12 +40,37 @@ Results:
   no warnings — under `Lobby/`, `Lobby/Voice/` and `MemInspect/`.
 * **`libmain.so` links** for `arm64-v8a`.
 * **The fork's unit tests build.** `VirtualNetTest.cpp` and `VirtualNetPeerTest.cpp`
-  compile into `Binaries/Tests/tests`. They were not *run*: the output is an Android
-  binary needing `/system/bin/linker64`, so it needs a device or emulator.
+  compile into `Binaries/Tests/tests`. They were not run *on Android*: the output is an
+  Android binary needing `/system/bin/linker64`, so that needs a device or emulator.
+  They were run on Linux instead — see below.
 * cubeb selects the **OpenSL ES** backend (`Externals/cubeb/CMakeLists.txt` force-disables
   AAudio), and `libOpenSLES.so` resolves from the NDK sysroot.
 
-Supporting facts, from reading the tree:
+### The lobby runs off Windows
+
+Cross-compiling proves the code is *accepted* by another toolchain, not that it *works*
+there. So the same tree was also built natively for Linux x86_64 and the tests were run:
+
+```sh
+cmake -S . -B build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DENABLE_QT=OFF -DENABLE_TESTS=ON -DENABLE_X11=OFF -DENABLE_EGL=OFF
+ninja -C build-linux tests
+build-linux/Binaries/Tests/tests --gtest_filter='VirtualNet*:-VirtualNetPeer.*'
+Source/UnitTests/Core/Lobby/run-peer-test.sh build-linux/Binaries/Tests/tests
+```
+
+* **`VirtualNetTest`: 21 of 21 pass.**
+* **The two-process peer test passes.** A host process brought a lobby up, a second
+  process joined it, was assigned `10.13.37.2`, and saw both members. Across that link
+  it then exercised unicast with a reply, broadcast reaching the other console, a TCP
+  stream, an ICMP echo answered by the other console's stack, and a reconnect that
+  preserved the address so an already-bound socket kept working.
+
+This is the first time the fork has been shown to work outside Windows/MSVC. It says
+nothing about Android's *runtime* — OpenSL, permissions, Doze — but the lobby, the
+virtual socket layer and the reconnect path are not Windows-dependent.
+
+### Supporting facts, from reading the tree:
 
 * There is no platform-specific code in `Core/Lobby` or `Core/MemInspect` — no
   `#ifdef _WIN32`, no Windows headers, no x86 intrinsics.
@@ -58,6 +83,14 @@ Supporting facts, from reading the tree:
 
 ## What is missing
 
+### 0. The JNI bridge — done
+
+`Source/Android/jni/Lobby/Lobby.cpp` and `features/lobby/Lobby.kt` expose the lobby's
+lifecycle and state to Kotlin: start, stop, status, local address, the peer list, reconnect,
+and voice running / capture-working / mute / deafen. **Nothing calls it yet** — see below.
+
+The device pickers are deliberately not bridged, for the cubeb reason under §3.
+
 ### 1. The frontend (the bulk of the work)
 
 `CMakeLists.txt` sets `ENABLE_QT 0` for Android, so none of the fork's UI is built.
@@ -69,8 +102,11 @@ Every call that brings a lobby up lives in `DolphinQt/MainWindow.cpp` (around
   JNI layer already exposes `installWAD`, `doOnlineUpdate`, `isSystemMenuInstalled` and
   `syncSdFolderToSdImage` in `Source/Android/jni/WiiUtils.cpp`. Only the UI is Qt.
 * **Lobby home screen** — `LobbyScreen`, `LobbyConfigWidget`, replacing the game list.
-* **Boot hook** — `Lobby::Start` → `VirtualNet::Initialize` → `Voice::Start` around
-  emulation start, with teardown on stop, plus the Brainslug DOL / default-ISO boot path.
+* **Boot hook** — call `Lobby.start()` before boot and `Lobby.stop()` after the console
+  has stopped, plus the Brainslug DOL / default-ISO boot path. This is deliberately not
+  wired up yet: it has to come *after* the settings above, because until a nickname and
+  host address can be configured, `start()` can only return `NOT_CONFIGURED`, and a boot
+  path that refused on that would refuse every boot on Android.
 * **Settings** — 21 new `MAIN_LOBBY_*` / `MAIN_VOICE_*` entries to surface. These fit
   Android's existing `BooleanSetting` / `StringSetting` enum pattern directly.
 
