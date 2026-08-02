@@ -161,6 +161,22 @@ object Lobby {
         get() = nativeGetMicGain()
         set(value) = nativeSetMicGain(value)
 
+    /**
+     * The noise gate, in dBFS: how loud the microphone has to be before anything
+     * is sent at all.
+     *
+     * This is what stops a phone broadcasting the game coming back out of its own
+     * speaker. Higher means more has to be spoken before it opens. Safe to change
+     * mid-race, which is the only practical way to tune it - the effect is on what
+     * other people hear, so it has to be adjusted while they are listening.
+     */
+    var voiceGateDb: Float
+        get() = nativeGetGateDb()
+        set(value) = nativeSetGateDb(value)
+
+    val minVoiceGateDb: Float get() = nativeGetMinGateDb()
+    val maxVoiceGateDb: Float get() = nativeGetMaxGateDb()
+
     @JvmStatic
     private external fun nativeStart(): Int
 
@@ -247,4 +263,16 @@ object Lobby {
 
     @JvmStatic
     private external fun nativeGetMicGain(): Int
+
+    @JvmStatic
+    private external fun nativeSetGateDb(db: Float)
+
+    @JvmStatic
+    private external fun nativeGetGateDb(): Float
+
+    @JvmStatic
+    private external fun nativeGetMinGateDb(): Float
+
+    @JvmStatic
+    private external fun nativeGetMaxGateDb(): Float
 }

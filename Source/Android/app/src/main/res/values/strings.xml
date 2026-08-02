@@ -1056,6 +1056,7 @@ It can efficiently compress both junk data and encrypted Wii data.
     <string name="voice_deafen">Deafen</string>
     <string name="voice_master_volume">Master volume</string>
     <string name="voice_mic_gain">Microphone gain</string>
+    <string name="voice_noise_gate">Noise gate: %1$d dB — raise until the game stops being sent</string>
     <string name="voice_people">In the lobby</string>
     <string name="voice_nobody_here">Nobody else is here yet.</string>
     <string name="voice_your_address">You are %1$s</string>

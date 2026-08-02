@@ -362,4 +362,30 @@ Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeGetMicGain(JNIEnv*, jc
   return static_cast<jint>(Lobby::Voice::Get().mic_gain);
 }
 
+// The noise gate, in dBFS. How loud the microphone has to be before anything is
+// sent at all - the control that stops a phone broadcasting its own speaker.
+JNIEXPORT void JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeSetGateDb(JNIEnv*, jclass, jfloat db)
+{
+  Lobby::Voice::SetGateDb(db);
+}
+
+JNIEXPORT jfloat JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeGetGateDb(JNIEnv*, jclass)
+{
+  return static_cast<jfloat>(Lobby::Voice::Get().gate_db);
+}
+
+JNIEXPORT jfloat JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeGetMinGateDb(JNIEnv*, jclass)
+{
+  return static_cast<jfloat>(Lobby::Voice::MIN_GATE_DB);
+}
+
+JNIEXPORT jfloat JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeGetMaxGateDb(JNIEnv*, jclass)
+{
+  return static_cast<jfloat>(Lobby::Voice::MAX_GATE_DB);
+}
+
 }  // extern "C"

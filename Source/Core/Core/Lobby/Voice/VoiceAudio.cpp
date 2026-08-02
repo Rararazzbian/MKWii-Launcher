@@ -131,6 +131,12 @@ bool AudioDevices::StartCapture(const std::string& device_id)
   params.rate = SAMPLE_RATE;
   params.channels = 1;
   params.layout = CUBEB_LAYOUT_MONO;
+  // Tell the backend this is speech rather than a recording. It costs nothing
+  // where it means nothing, and on Android it decides which capture path the
+  // system hands over: without it the microphone is opened as a camcorder,
+  // which is deliberately unprocessed and picks up the game coming back out of
+  // the speaker a few centimetres away.
+  params.prefs = CUBEB_STREAM_PREF_VOICE;
 
   u32 latency = 0;
   if (cubeb_get_min_latency(m_context.get(), &params, &latency) != CUBEB_OK)

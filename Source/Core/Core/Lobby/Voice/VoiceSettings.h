@@ -34,7 +34,10 @@ constexpr int MAX_BITRATE = 256000;
 // A gate this low is effectively open; it exists so a noisy room can be shut
 // out without also cutting off quiet speech.
 constexpr float MIN_GATE_DB = -90.0f;
-constexpr float DEFAULT_GATE_DB = -60.0f;
+// Low enough not to clip the quiet end of normal speech, high enough to stop
+// the game's own audio coming back out of a phone's speaker and into its
+// microphone a few centimetres away. -60 let essentially everything through.
+constexpr float DEFAULT_GATE_DB = -45.0f;
 constexpr float MAX_GATE_DB = 0.0f;
 
 // World units. A kart at 100 km/h covers roughly 3800 of them a second, so the

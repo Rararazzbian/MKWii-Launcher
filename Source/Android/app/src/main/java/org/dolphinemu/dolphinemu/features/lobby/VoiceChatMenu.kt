@@ -76,6 +76,36 @@ object VoiceChatMenu {
         content.addView(sliderLabel(activity, R.string.voice_mic_gain, dp(8)))
         content.addView(percentSlider(activity, Lobby.micGain) { Lobby.micGain = it })
 
+        // The noise gate, live. On a phone this is the control that matters: the
+        // speaker is a few centimetres from the microphone, so without it the game
+        // goes back out to everyone else. It has to be tunable while other people
+        // are listening, because the effect is on what they hear, not on anything
+        // audible from here.
+        val gateLabel = TextView(activity).apply { setPadding(0, dp(8), 0, 0) }
+        content.addView(gateLabel)
+
+        val gateMin = Lobby.minVoiceGateDb
+        val gateMax = Lobby.maxVoiceGateDb
+        fun showGate(db: Float) {
+            gateLabel.text = activity.getString(R.string.voice_noise_gate, db.toInt())
+        }
+        showGate(Lobby.voiceGateDb)
+        content.addView(SeekBar(activity).apply {
+            max = (gateMax - gateMin).toInt()
+            progress = (Lobby.voiceGateDb - gateMin).toInt().coerceIn(0, max)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) {
+                    if (!fromUser) return
+                    val db = gateMin + value
+                    Lobby.voiceGateDb = db
+                    showGate(db)
+                }
+
+                override fun onStartTrackingTouch(bar: SeekBar) = Unit
+                override fun onStopTrackingTouch(bar: SeekBar) = Unit
+            })
+        })
+
         content.addView(sliderLabel(activity, R.string.voice_people, dp(16)))
 
         val peerList = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
