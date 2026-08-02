@@ -430,6 +430,8 @@ add_library(core
   IOS/Network/NCD/WiiNetConfig.h
   IOS/Network/Socket.cpp
   IOS/Network/Socket.h
+  Lobby/LanModule.cpp
+  Lobby/LanModule.h
   Lobby/LobbyNet.cpp
   Lobby/LobbyNet.h
   Lobby/NetTrace.cpp

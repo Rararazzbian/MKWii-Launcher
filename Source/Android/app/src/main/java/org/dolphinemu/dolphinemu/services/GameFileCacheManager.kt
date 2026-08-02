@@ -36,11 +36,28 @@ object GameFileCacheManager {
         return gameFiles
     }
 
+    /**
+     * Fork: the one game this build is for.
+     *
+     * The LAN Play Module patches this disc and no other, so any other disc in
+     * the Wii tab is something that cannot be raced over the lobby. Homebrew is
+     * not filtered: it boots directly rather than through Brainslug, and still
+     * gets the lobby and the virtual network.
+     *
+     * Filtered here rather than in the scanner so the cache still knows about
+     * everything - pointing this at a folder of games gives one entry, not a
+     * broken scan.
+     */
+    private const val SUPPORTED_GAME_ID = "RMCE01"
+
     @JvmStatic
     fun getGameFilesForPlatformTab(platformTab: PlatformTab): List<GameFile> {
         val allGames = gameFiles.value!!
         val platformTabGames = ArrayList<GameFile>()
+        val restrictToSupportedGame = platformTab == PlatformTab.WII
         for (game in allGames) {
+            if (restrictToSupportedGame && game.getGameId() != SUPPORTED_GAME_ID)
+                continue
             if (Platform.fromInt(game.getPlatform()).toPlatformTab() == platformTab) {
                 platformTabGames.add(game)
             }

@@ -201,7 +201,7 @@ class MainActivity : AppCompatActivity(), MainView, OnRefreshListener, ThemeProv
         GridOptionDialogFragment().show(supportFragmentManager, "gridOptions")
 
     private fun forEachPlatformGamesView(action: (PlatformGamesView) -> Unit) {
-        for (platformTab in PlatformTab.values()) {
+        for (platformTab in PlatformTab.VISIBLE) {
             val fragment = getPlatformGamesView(platformTab)
             if (fragment != null) {
                 action(fragment)
@@ -210,8 +210,11 @@ class MainActivity : AppCompatActivity(), MainView, OnRefreshListener, ThemeProv
     }
 
     private fun getPlatformGamesView(platformTab: PlatformTab): PlatformGamesView? {
+        // The pager tags fragments by position, and this build shows only some of
+        // the tabs, so the position is not the enum's own value any more.
         val fragmentTag =
-            "android:switcher:" + binding.pagerPlatforms.id + ":" + platformTab.toInt()
+            "android:switcher:" + binding.pagerPlatforms.id + ":" +
+                    PlatformTab.positionOf(platformTab)
         return supportFragmentManager.findFragmentByTag(fragmentTag) as PlatformGamesView?
     }
 
@@ -238,7 +241,10 @@ class MainActivity : AppCompatActivity(), MainView, OnRefreshListener, ThemeProv
             binding.tabsPlatforms.getTabAt(i)?.setIcon(PlatformPagerAdapter.TAB_ICONS[i])
         }
 
-        binding.pagerPlatforms.currentItem = IntSetting.MAIN_LAST_PLATFORM_TAB.int
+        // Clamped: a tab index stored by a build that showed more of them would
+        // otherwise be out of range here.
+        binding.pagerPlatforms.currentItem =
+            IntSetting.MAIN_LAST_PLATFORM_TAB.int.coerceIn(0, PlatformTab.VISIBLE.size - 1)
 
         showGames()
         GameFileCacheManager.startLoad()

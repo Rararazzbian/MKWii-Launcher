@@ -21,12 +21,12 @@ class PlatformPagerAdapter(
         return fragment
     }
 
-    override fun getCount(): Int = TAB_ICONS.size
+    override fun getCount(): Int = PlatformTab.VISIBLE.size
 
     companion object {
+        // Fork: one icon per visible tab, in the same order.
         @JvmField
         val TAB_ICONS = intArrayOf(
-            R.drawable.ic_gamecube,
             R.drawable.ic_wii,
             R.drawable.ic_folder
         )

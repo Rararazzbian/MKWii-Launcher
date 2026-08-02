@@ -25,6 +25,7 @@
 #include "Common/CommonTypes.h"
 
 #include "Core/Config/MainSettings.h"
+#include "Core/Lobby/LanModule.h"
 #include "Core/Lobby/LobbyNet.h"
 #include "Core/Lobby/NetTrace.h"
 #include "Core/Lobby/VirtualNet.h"
@@ -386,6 +387,48 @@ JNIEXPORT jfloat JNICALL
 Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeGetMaxGateDb(JNIEnv*, jclass)
 {
   return static_cast<jfloat>(Lobby::Voice::MAX_GATE_DB);
+}
+
+// --------------------------------------------------------------------------
+// The LAN Play Module.
+// --------------------------------------------------------------------------
+
+JNIEXPORT jboolean JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_LanModule_nativeIsInstalled(JNIEnv*, jclass)
+{
+  return static_cast<jboolean>(Lobby::LanModule::IsInstalled());
+}
+
+JNIEXPORT jstring JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_LanModule_nativeGetBrainslugPath(JNIEnv* env, jclass)
+{
+  return ToJString(env, Lobby::LanModule::BrainslugPath());
+}
+
+// Blocking: downloads, unpacks and writes the card image. Returns an empty
+// string on success, or a message worth showing. `callback` is a Kotlin
+// LanModule.Progress, invoked from this thread, and returning false from it
+// gives up.
+JNIEXPORT jstring JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_LanModule_nativeDownloadAndInstall(JNIEnv* env,
+                                                                                jclass,
+                                                                                jobject callback)
+{
+  jclass callback_class = env->GetObjectClass(callback);
+  jmethodID on_progress =
+      env->GetMethodID(callback_class, "onProgress", "(Ljava/lang/String;JJ)Z");
+
+  const std::string error = Lobby::LanModule::DownloadAndInstall(
+      [&](const std::string& stage, s64 current, s64 total) {
+        jstring jstage = ToJString(env, stage);
+        const jboolean keep_going =
+            env->CallBooleanMethod(callback, on_progress, jstage,
+                                   static_cast<jlong>(current), static_cast<jlong>(total));
+        env->DeleteLocalRef(jstage);
+        return keep_going == JNI_TRUE;
+      });
+
+  return ToJString(env, error);
 }
 
 }  // extern "C"

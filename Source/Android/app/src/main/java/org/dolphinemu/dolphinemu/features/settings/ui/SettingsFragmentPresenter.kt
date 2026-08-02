@@ -2,6 +2,7 @@
 
 package org.dolphinemu.dolphinemu.features.settings.ui
 
+import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -29,6 +30,8 @@ import org.dolphinemu.dolphinemu.features.input.model.view.InputDeviceSetting
 import org.dolphinemu.dolphinemu.features.input.model.view.InputMappingControlSetting
 import org.dolphinemu.dolphinemu.features.input.ui.ProfileDialog
 import org.dolphinemu.dolphinemu.features.input.ui.ProfileDialogPresenter
+import org.dolphinemu.dolphinemu.features.lobby.LanModule
+import org.dolphinemu.dolphinemu.features.lobby.LanModuleInstaller
 import org.dolphinemu.dolphinemu.features.settings.model.*
 import org.dolphinemu.dolphinemu.features.settings.model.view.*
 import org.dolphinemu.dolphinemu.features.settings.model.AchievementModel.logout
@@ -1141,6 +1144,22 @@ class SettingsFragmentPresenter(
                 R.string.lobby_net_trace,
                 R.string.lobby_net_trace_description
             )
+        )
+
+        // Only while nothing is running: it rewrites the SD card image, which a
+        // booted console is reading.
+        sl.add(
+            RunRunnable(
+                context,
+                R.string.lan_module_install,
+                if (LanModule.isInstalled) R.string.lan_module_installed_already
+                else R.string.lan_module_description,
+                0,
+                0,
+                false
+            ) {
+                (context as? Activity)?.let { LanModuleInstaller.install(it) }
+            }
         )
     }
 

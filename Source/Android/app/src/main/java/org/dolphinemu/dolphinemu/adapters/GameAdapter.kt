@@ -14,6 +14,7 @@ import org.dolphinemu.dolphinemu.services.GameFileCacheManager
 import org.dolphinemu.dolphinemu.R
 import android.view.animation.AnimationUtils
 import org.dolphinemu.dolphinemu.activities.EmulationActivity
+import org.dolphinemu.dolphinemu.features.lobby.BrainslugBoot
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
@@ -144,8 +145,11 @@ class GameAdapter : RecyclerView.Adapter<GameViewHolder>(),
      */
     override fun onClick(view: View) {
         val holder = view.tag as GameViewHolder
-        val paths = GameFileCacheManager.findSecondDiscAndGetPaths(holder.gameFile)
-        EmulationActivity.launch(view.context as FragmentActivity, paths, false)
+        // Fork: through Brainslug, so the LAN Play Module is applied. Booting the
+        // disc directly would start plain Mario Kart Wii, whose multiplayer looks
+        // for servers that no longer exist. Second-disc handling is dropped with
+        // it - the one game this plays is not a multi-disc title.
+        BrainslugBoot.play(view.context as FragmentActivity, holder.gameFile)
     }
 
     /**

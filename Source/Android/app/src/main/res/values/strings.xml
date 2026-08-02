@@ -1078,4 +1078,16 @@ It can efficiently compress both junk data and encrypted Wii data.
     <string name="lobby_voice_enabled_description">Talk to the others in the lobby, positionally during a race.</string>
     <string name="lobby_net_trace">Log the virtual network</string>
     <string name="lobby_net_trace_description">Writes every packet to User/Logs/VirtualNet.log. Leave on unless you need the space.</string>
+    <string name="lan_module">LAN Play Module</string>
+    <string name="lan_module_description">Patches Mario Kart Wii to race over the lobby instead of Nintendo\'s servers. Downloaded from chadsoft.co.uk.</string>
+    <string name="lan_module_install">Install the LAN Play Module</string>
+    <string name="lan_module_installed_already">Installed. Tap to install it again.</string>
+    <string name="lan_module_connecting">Connecting…</string>
+    <string name="lan_module_downloading">Downloading… %1$d / %2$d MiB</string>
+    <string name="lan_module_extracting">Extracting… (%1$d files)</string>
+    <string name="lan_module_writing">Writing the SD card image…</string>
+    <string name="lan_module_installed">LAN Play Module installed</string>
+    <string name="lan_module_missing_title">LAN Play Module not installed</string>
+    <string name="lan_module_missing">Without it Mario Kart Wii will look for Nintendo\'s servers, which no longer exist, instead of the lobby.\n\nInstall it from Settings, Config, Lobby.</string>
+    <string name="lan_module_boot_anyway">Play anyway</string>
 </resources>
