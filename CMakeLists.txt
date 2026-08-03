@@ -23,6 +23,17 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 project(dolphin-emu)
 
+# Fork: project() above declares no languages, so CMake enables C and CXX and
+# nothing else. Ninja will then silently skip .rc files - not fail, skip - so
+# DolphinQt.rc never compiles, the executable carries no icon resource, and
+# Windows falls back to the generic placeholder in the taskbar.
+#
+# The Visual Studio generator compiles .rc through the project file regardless
+# of the enabled languages, which is why this only shows up on a Ninja build.
+if(WIN32)
+  enable_language(RC)
+endif()
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMake)
 
 # Support functions
