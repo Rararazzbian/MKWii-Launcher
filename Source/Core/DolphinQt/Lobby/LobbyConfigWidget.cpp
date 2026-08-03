@@ -93,6 +93,20 @@ LobbyConfigWidget::LobbyConfigWidget(bool show_microphone, QWidget* parent) : QW
   role_layout->addWidget(m_host, 0, 0);
   role_layout->addWidget(m_client, 1, 0);
 
+  // How the two ends find each other. Direct needs a reachable address, and so
+  // a forwarded port on the host's router; traversal has a server introduce
+  // them, which costs a round trip at startup and nothing after.
+  m_direct = new QRadioButton(tr("Direct connection"));
+  m_traversal = new QRadioButton(tr("Traversal server (no port forwarding)"));
+  const bool use_traversal = Config::Get(Config::MAIN_LOBBY_USE_TRAVERSAL);
+  m_traversal->setChecked(use_traversal);
+  m_direct->setChecked(!use_traversal);
+
+  auto* const connection_box = new QGroupBox(tr("Connection"));
+  auto* const connection_layout = new QGridLayout(connection_box);
+  connection_layout->addWidget(m_direct, 0, 0);
+  connection_layout->addWidget(m_traversal, 1, 0);
+
   m_port = new QSpinBox;
   m_port->setRange(1, 65535);
   m_port->setValue(Config::Get(Config::MAIN_LOBBY_PORT));
@@ -108,8 +122,9 @@ LobbyConfigWidget::LobbyConfigWidget(bool show_microphone, QWidget* parent) : QW
   m_address->setText(QString::fromStdString(Config::Get(Config::MAIN_LOBBY_HOST_ADDRESS)));
 
   m_client_box = new QGroupBox(tr("Joining"));
+  m_address_label = new QLabel(tr("Host address:"));
   auto* const client_layout = new QGridLayout(m_client_box);
-  client_layout->addWidget(new QLabel(tr("Host address:")), 0, 0);
+  client_layout->addWidget(m_address_label, 0, 0);
   client_layout->addWidget(m_address, 0, 1);
   client_layout->setColumnStretch(1, 1);
 
@@ -117,6 +132,7 @@ LobbyConfigWidget::LobbyConfigWidget(bool show_microphone, QWidget* parent) : QW
   layout->setContentsMargins(0, 0, 0, 0);
   layout->addWidget(identity_box);
   layout->addWidget(role_box);
+  layout->addWidget(connection_box);
   layout->addWidget(m_host_box);
   layout->addWidget(m_client_box);
 
@@ -131,6 +147,10 @@ LobbyConfigWidget::LobbyConfigWidget(bool show_microphone, QWidget* parent) : QW
     UpdateRoleVisibility();
     emit Changed();
   });
+  connect(m_traversal, &QRadioButton::toggled, this, [this] {
+    UpdateRoleVisibility();
+    emit Changed();
+  });
 }
 
 void LobbyConfigWidget::UpdateRoleVisibility()
@@ -138,8 +158,24 @@ void LobbyConfigWidget::UpdateRoleVisibility()
   // Only one of the two is ever relevant, and showing the other greyed out
   // just invites people to fill in a field that does nothing.
   const bool is_host = m_host->isChecked();
-  m_host_box->setVisible(is_host);
+  const bool use_traversal = m_traversal->isChecked();
+
+  // A traversal host configures nothing: its room code is issued when the lobby
+  // starts, and shown in the voice panel then. There is no port to pick, which
+  // is the whole point of using one.
+  m_host_box->setVisible(is_host && !use_traversal);
   m_client_box->setVisible(!is_host);
+
+  if (use_traversal)
+  {
+    m_address_label->setText(tr("Room code:"));
+    m_address->setPlaceholderText(tr("code from the host"));
+  }
+  else
+  {
+    m_address_label->setText(tr("Host address:"));
+    m_address->setPlaceholderText(QStringLiteral("192.168.1.10:7788"));
+  }
 }
 
 bool LobbyConfigWidget::IsComplete() const
@@ -148,6 +184,10 @@ bool LobbyConfigWidget::IsComplete() const
     return false;
   if (m_host->isChecked())
     return true;
+  // A room code is not an address and will not parse as one; any non-empty code
+  // is worth trying, and the traversal server is the thing that can say no.
+  if (m_traversal->isChecked())
+    return !m_address->text().trimmed().isEmpty();
   return ParseAddress(m_address->text().trimmed(), nullptr, nullptr);
 }
 
@@ -155,6 +195,7 @@ void LobbyConfigWidget::Save() const
 {
   Config::SetBase(Config::MAIN_LOBBY_NICKNAME, m_nickname->text().trimmed().toStdString());
   Config::SetBase(Config::MAIN_LOBBY_IS_HOST, m_host->isChecked());
+  Config::SetBase(Config::MAIN_LOBBY_USE_TRAVERSAL, m_traversal->isChecked());
   Config::SetBase(Config::MAIN_LOBBY_PORT, m_port->value());
   Config::SetBase(Config::MAIN_LOBBY_HOST_ADDRESS, m_address->text().trimmed().toStdString());
 

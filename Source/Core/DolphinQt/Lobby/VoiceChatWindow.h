@@ -21,6 +21,7 @@
 #include "Common/CommonTypes.h"
 
 class QComboBox;
+class QGroupBox;
 class QLabel;
 class QPushButton;
 class QSpinBox;
@@ -93,6 +94,9 @@ private:
 
   QSpinBox* m_proximity_range;
   QCheckBox* m_spatial;
+  QLabel* m_room_code;
+  QPushButton* m_copy_code;
+  QGroupBox* m_room_box;
 
   QVBoxLayout* m_peer_layout;
   QLabel* m_peer_empty;

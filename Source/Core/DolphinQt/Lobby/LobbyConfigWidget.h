@@ -7,6 +7,7 @@
 
 class QComboBox;
 class QGroupBox;
+class QLabel;
 class QLineEdit;
 class QRadioButton;
 class QSpinBox;
@@ -41,8 +42,11 @@ private:
   QComboBox* m_microphone = nullptr;
   QRadioButton* m_host;
   QRadioButton* m_client;
+  QRadioButton* m_direct;
+  QRadioButton* m_traversal;
   QSpinBox* m_port;
   QLineEdit* m_address;
   QGroupBox* m_host_box;
   QGroupBox* m_client_box;
+  QLabel* m_address_label;
 };

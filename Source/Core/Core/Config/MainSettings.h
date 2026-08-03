@@ -284,6 +284,10 @@ extern const Info<std::string> MAIN_MKW_GAME_PATH;
 extern const Info<int> MAIN_LOBBY_PORT;
 // "host:port" of the lobby to join. Only meaningful when not hosting.
 extern const Info<std::string> MAIN_LOBBY_HOST_ADDRESS;
+extern const Info<bool> MAIN_LOBBY_USE_TRAVERSAL;
+extern const Info<std::string> MAIN_LOBBY_TRAVERSAL_SERVER;
+extern const Info<u16> MAIN_LOBBY_TRAVERSAL_PORT;
+extern const Info<u16> MAIN_LOBBY_TRAVERSAL_PORT_ALT;
 // Tracing for the virtual Wii network, written to User\Logs\VirtualNet.log.
 // On by default: a fault that only appears with two consoles talking to each
 // other is not something anyone can reproduce on demand, so the trace has to

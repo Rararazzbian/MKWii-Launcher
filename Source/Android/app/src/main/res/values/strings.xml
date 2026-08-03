@@ -1074,6 +1074,13 @@ It can efficiently compress both junk data and encrypted Wii data.
     <string name="lobby_is_host_description">On to run the lobby others join. Off to join someone else\'s.</string>
     <string name="lobby_host_address">Connect to</string>
     <string name="lobby_host_address_description">The host\'s address. Add :port only if they changed it, for example 192.168.1.20:7788.</string>
+    <string name="lobby_use_traversal">Use a traversal server</string>
+    <string name="lobby_use_traversal_description">Connect through a relay that introduces the two of you, so hosting needs no port forwarding. Hosts get a room code instead of an address.</string>
+    <string name="lobby_room_code">Room code</string>
+    <string name="lobby_room_code_description">The code the host was given when they started the lobby.</string>
+    <string name="voice_room_code">Room code: %1$s — tap to copy</string>
+    <string name="voice_room_code_label">Room code</string>
+    <string name="voice_room_code_copied">Room code copied</string>
     <string name="lobby_port">Listen on port</string>
     <string name="lobby_port_description">The port others connect to. Leave at 7788 unless something else is using it.</string>
     <string name="lobby_voice_enabled">Voice chat</string>

@@ -968,6 +968,12 @@ enum class BooleanSetting(
         "IsHost",
         true
     ),
+    MAIN_LOBBY_USE_TRAVERSAL(
+        Settings.FILE_DOLPHIN,
+        Settings.SECTION_INI_MKW_LAUNCHER,
+        "UseTraversal",
+        false
+    ),
     MAIN_LOBBY_NET_TRACE(
         Settings.FILE_DOLPHIN,
         Settings.SECTION_INI_MKW_LAUNCHER,
@@ -1061,6 +1067,7 @@ enum class BooleanSetting(
             // console is running would appear to do nothing until the next boot.
             MAIN_SETUP_WIZARD_COMPLETE,
             MAIN_LOBBY_IS_HOST,
+            MAIN_LOBBY_USE_TRAVERSAL,
             MAIN_LOBBY_NET_TRACE,
             MAIN_LOBBY_NET_TRACE_PAYLOADS,
             MAIN_MEMINSPECT_WEB,

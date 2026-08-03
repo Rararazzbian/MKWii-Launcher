@@ -3,6 +3,9 @@
 package org.dolphinemu.dolphinemu.features.lobby
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -12,6 +15,7 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.widget.SwitchCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.dolphinemu.dolphinemu.R
@@ -42,6 +46,31 @@ object VoiceChatMenu {
 
         val status = TextView(activity)
         content.addView(status)
+
+        // The room code, when hosting through a traversal server. This is the
+        // only place it exists: it is issued by the server when the lobby starts,
+        // so there is nowhere earlier to show it.
+        val roomCode = TextView(activity).apply {
+            setPadding(0, dp(4), 0, dp(4))
+            textSize = 16f
+            // Tap to copy. A code is only useful once it has reached someone
+            // else, and reading eight characters aloud is the worst way to do it.
+            setOnClickListener {
+                val code = Lobby.hostCode
+                if (code.isNotEmpty()) {
+                    val clipboard =
+                        activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(
+                        ClipData.newPlainText(
+                            activity.getString(R.string.voice_room_code_label), code
+                        )
+                    )
+                    Toast.makeText(activity, R.string.voice_room_code_copied, Toast.LENGTH_SHORT)
+                        .show()
+                }
+            }
+        }
+        content.addView(roomCode)
 
         val localAddress = TextView(activity).apply {
             alpha = 0.7f
@@ -153,6 +182,10 @@ object VoiceChatMenu {
                     } else {
                         Lobby.voiceStatusText
                     }
+                val code = Lobby.hostCode
+                roomCode.visibility = if (code.isEmpty()) View.GONE else View.VISIBLE
+                roomCode.text = activity.getString(R.string.voice_room_code, code)
+
                 val address = Lobby.localAddress
                 localAddress.visibility = if (address.isEmpty()) View.GONE else View.VISIBLE
                 localAddress.text = activity.getString(R.string.voice_your_address, address)

@@ -54,6 +54,15 @@ object Lobby {
     /** This device's address on the lobby's private range, or empty until assigned. */
     val localAddress: String get() = nativeGetLocalAddress()
 
+    /**
+     * The room code to give people, when hosting through a traversal server.
+     *
+     * Empty when hosting directly, when joining, and until the traversal server
+     * has answered - which is also why hosting that way does not report itself
+     * connected until there is a code to hand out.
+     */
+    val hostCode: String get() = nativeGetHostCode()
+
     /** Everyone in the lobby, this device included, ordered by address. */
     val peers: List<Peer>
         get() {
@@ -206,6 +215,9 @@ object Lobby {
 
     @JvmStatic
     private external fun nativeGetLocalAddress(): String
+
+    @JvmStatic
+    private external fun nativeGetHostCode(): String
 
     @JvmStatic
     private external fun nativeGetPeerAddresses(): Array<String>

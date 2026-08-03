@@ -9,7 +9,9 @@
 #include <QComboBox>
 #include <QFrame>
 #include <QGridLayout>
+#include <QClipboard>
 #include <QGroupBox>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
@@ -110,6 +112,28 @@ void VoiceChatWindow::CreateWidgets()
   m_status = new QLabel;
   m_status->setWordWrap(true);
   layout->addWidget(m_status);
+
+  // The room code, for a host reached through a traversal server. It does not
+  // exist until the server issues one, which is after the lobby starts, so this
+  // is the first place it can be shown - and the only one.
+  m_room_code = new QLabel;
+  m_room_code->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  QFont code_font = m_room_code->font();
+  code_font.setPointSize(code_font.pointSize() + 3);
+  code_font.setBold(true);
+  m_room_code->setFont(code_font);
+
+  m_copy_code = new QPushButton(tr("Copy"));
+  connect(m_copy_code, &QPushButton::clicked, this, [this] {
+    QGuiApplication::clipboard()->setText(QString::fromStdString(Lobby::GetHostCode()));
+  });
+
+  m_room_box = new QGroupBox(tr("Room code"));
+  auto* const room_layout = new QHBoxLayout(m_room_box);
+  room_layout->addWidget(m_room_code, 1);
+  room_layout->addWidget(m_copy_code);
+  m_room_box->hide();
+  layout->addWidget(m_room_box);
 
   auto* toggles = new QHBoxLayout;
   m_mute = new QPushButton(tr("Mute"));
@@ -300,6 +324,10 @@ void VoiceChatWindow::LoadSettings()
   const Lobby::Voice::Settings settings = Lobby::Voice::Get();
 
   const QSignalBlocker block_mute(m_mute);
+  const std::string room_code = Lobby::GetHostCode();
+  m_room_box->setVisible(!room_code.empty());
+  m_room_code->setText(QString::fromStdString(room_code));
+
   const QSignalBlocker block_spatial(m_spatial);
   m_spatial->setChecked(settings.spatial);
 

@@ -153,6 +153,15 @@ Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeGetLocalAddress(JNIEnv
   return ToJString(env, ip == 0 ? std::string{} : Lobby::Trace::FormatIP(ip));
 }
 
+// The room code the traversal server issued, for a host reached that way. Empty
+// otherwise, and empty until the server answers - which is why hosting does not
+// report Connected until there is one to show.
+JNIEXPORT jstring JNICALL
+Java_org_dolphinemu_dolphinemu_features_lobby_Lobby_nativeGetHostCode(JNIEnv* env, jclass)
+{
+  return ToJString(env, Lobby::GetHostCode());
+}
+
 // The three peer arrays below are parallel and always the same length: entry i
 // of each describes one lobby member, this console included, ordered by address.
 JNIEXPORT jobjectArray JNICALL

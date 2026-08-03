@@ -1087,11 +1087,12 @@ class SettingsFragmentPresenter(
                 R.string.lobby_nickname_description
             )
         )
-        // Hosting and joining need different things, and showing both at once
-        // means two port fields on screen with only their descriptions to say
-        // which one is live. Only the relevant one is listed, and toggling this
-        // rebuilds the list.
+        // Hosting and joining need different things, and so do the two ways of
+        // being reached, so only the settings that apply are listed. Both
+        // switches rebuild the list when toggled.
         val isHost = BooleanSetting.MAIN_LOBBY_IS_HOST.boolean
+        val useTraversal = BooleanSetting.MAIN_LOBBY_USE_TRAVERSAL.boolean
+
         sl.add(
             SwitchSetting(
                 context,
@@ -1100,8 +1101,29 @@ class SettingsFragmentPresenter(
                 R.string.lobby_is_host_description
             ).apply { onChanged = { loadSettingsList() } }
         )
+        sl.add(
+            SwitchSetting(
+                context,
+                BooleanSetting.MAIN_LOBBY_USE_TRAVERSAL,
+                R.string.lobby_use_traversal,
+                R.string.lobby_use_traversal_description
+            ).apply { onChanged = { loadSettingsList() } }
+        )
 
-        if (isHost) {
+        if (useTraversal) {
+            // Nothing to configure for a host: the room code is issued when the
+            // lobby starts and shown in the voice panel. A client needs the code.
+            if (!isHost) {
+                sl.add(
+                    InputStringSetting(
+                        context,
+                        StringSetting.MAIN_LOBBY_HOST_ADDRESS,
+                        R.string.lobby_room_code,
+                        R.string.lobby_room_code_description
+                    )
+                )
+            }
+        } else if (isHost) {
             // The port is an int in C++, but Config keeps every value as text in
             // the ini and parses on read, so editing it as a string works and
             // gives a numeric field rather than a slider nobody could drag to an

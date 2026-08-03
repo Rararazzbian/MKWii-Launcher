@@ -461,6 +461,19 @@ const Info<std::string> MAIN_LOBBY_MICROPHONE{{System::Main, "MKWiiLauncher", "M
 const Info<std::string> MAIN_MKW_GAME_PATH{{System::Main, "MKWiiLauncher", "GamePath"}, ""};
 const Info<int> MAIN_LOBBY_PORT{{System::Main, "MKWiiLauncher", "LobbyPort"}, 7788};
 const Info<std::string> MAIN_LOBBY_HOST_ADDRESS{{System::Main, "MKWiiLauncher", "LobbyHost"}, ""};
+// Reach the lobby through a traversal server rather than a routable address, so
+// hosting does not need a forwarded port. The host is given a short code and
+// clients dial that; the server only introduces the two of them and then gets
+// out of the way, so nothing but the handshake goes through it.
+const Info<bool> MAIN_LOBBY_USE_TRAVERSAL{{System::Main, "MKWiiLauncher", "UseTraversal"}, false};
+// Dolphin's own, by default. It is someone else's infrastructure, and the
+// protocol is CC0 and the server small, so point this at your own if this ever
+// gets more than occasional use.
+const Info<std::string> MAIN_LOBBY_TRAVERSAL_SERVER{
+    {System::Main, "MKWiiLauncher", "TraversalServer"}, "stun.dolphin-emu.org"};
+const Info<u16> MAIN_LOBBY_TRAVERSAL_PORT{{System::Main, "MKWiiLauncher", "TraversalPort"}, 6262};
+const Info<u16> MAIN_LOBBY_TRAVERSAL_PORT_ALT{
+    {System::Main, "MKWiiLauncher", "TraversalPortAlt"}, 6226};
 const Info<bool> MAIN_LOBBY_NET_TRACE{{System::Main, "MKWiiLauncher", "NetTrace"}, true};
 const Info<bool> MAIN_LOBBY_NET_TRACE_PAYLOADS{
     {System::Main, "MKWiiLauncher", "NetTracePayloads"}, true};

@@ -98,6 +98,11 @@ bool IsActive();
 Status GetStatus();
 // Human-readable, for the UI and for error dialogs.
 std::string GetStatusText();
+
+// The room code the traversal server issued, for a host that asked to be
+// reached that way. Empty otherwise, and empty until the server answers - which
+// is also why hosting only reports Connected once there is one.
+std::string GetHostCode();
 Role GetRole();
 
 // This machine's address on the lobby's private range. Zero until a client has

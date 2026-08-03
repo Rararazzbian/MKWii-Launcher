@@ -18,6 +18,8 @@
 
 #include <enet/enet.h>
 
+#include "Common/TraversalClient.h"
+
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
 #include "Common/Swap.h"
@@ -179,6 +181,13 @@ struct State
 
   // Lobby thread only.
   ENetHost* host = nullptr;
+  // False when the host belongs to the traversal client, which owns and reuses
+  // one across sessions. Destroying it from here would take theirs with it.
+  bool owns_host = true;
+  bool use_traversal = false;
+  // The host's code, once the traversal server has issued one. Empty otherwise,
+  // including for clients, which only ever dial someone else's.
+  std::string host_code;
   ENetAddress server_address{};
   std::chrono::steady_clock::time_point next_retry{};
   // Set while a dial is pending; see BeginDial.
@@ -754,6 +763,22 @@ void BeginDial(const char* why)
   s_state.dial_at = std::chrono::steady_clock::now() + std::chrono::milliseconds(DIAL_DELAY_MS);
 }
 
+// The traversal server's side of the conversation.
+//
+// Every one of these arrives on the lobby thread, because that is where
+// enet_host_service and HandleResends are called from, so they can touch lobby
+// state directly rather than hopping threads.
+class TraversalHandler final : public Common::TraversalClientClient
+{
+public:
+  void OnTraversalStateChanged() override;
+  void OnConnectReady(ENetAddress addr) override;
+  void OnConnectFailed(Common::TraversalConnectFailedReason reason) override;
+  void OnTtlDetermined(u8 ttl) override {}
+};
+
+TraversalHandler s_traversal_handler;
+
 // Lobby thread only.
 void Dial()
 {
@@ -764,6 +789,23 @@ void Dial()
   }
 
   VNET_TRACE(Lobby, "dialling {}", address);
+
+  if (s_state.use_traversal)
+  {
+    // Nothing to connect to yet: the traversal server has to introduce the two
+    // ends first. The actual enet_host_connect happens in OnConnectReady.
+    if (!Common::g_TraversalClient)
+    {
+      SetStatus(Status::Failed, "Traversal client went away");
+      return;
+    }
+    if (Common::g_TraversalClient->HasFailed())
+      Common::g_TraversalClient->ReconnectToServer();
+    Common::g_TraversalClient->ConnectToClient(address);
+    SetStatus(Status::Connecting, "Looking up room " + address);
+    return;
+  }
+
   ENetPeer* const peer =
       enet_host_connect(s_state.host, &s_state.server_address, CHANNEL_COUNT, 0);
   s_state.server_peer.store(peer);
@@ -773,6 +815,89 @@ void Dial()
     return;
   }
   SetStatus(Status::Connecting, "Connecting to " + address);
+}
+
+void TraversalHandler::OnTraversalStateChanged()
+{
+  if (!Common::g_TraversalClient)
+    return;
+
+  switch (Common::g_TraversalClient->GetState())
+  {
+  case Common::TraversalClient::State::Connecting:
+    SetStatus(Status::Connecting, "Contacting the traversal server");
+    break;
+
+  case Common::TraversalClient::State::Connected:
+  {
+    if (s_state.role == Role::Host)
+    {
+      const auto id = Common::g_TraversalClient->GetHostID();
+      const std::string code(id.data(), id.size());
+      {
+        std::lock_guard lock{s_state.mutex};
+        s_state.host_code = code;
+      }
+      SetStatus(Status::Connected, "Hosting, room code " + code);
+      VNET_TRACE(Lobby, "traversal gave us room code {}", code);
+    }
+    else
+    {
+      // The server is up but has not been asked for anyone yet. Dial now that
+      // there is something to dial through.
+      std::string address;
+      {
+        std::lock_guard lock{s_state.mutex};
+        address = s_state.join_address;
+      }
+      Common::g_TraversalClient->ConnectToClient(address);
+      SetStatus(Status::Connecting, "Looking up room " + address);
+    }
+    break;
+  }
+
+  case Common::TraversalClient::State::Failure:
+    SetStatus(Status::Failed, "Could not reach the traversal server");
+    VNET_TRACE(Lobby, "traversal server unreachable");
+    break;
+  }
+}
+
+void TraversalHandler::OnConnectReady(ENetAddress addr)
+{
+  // The hole is punched; this is an ordinary ENet connect from here on, and
+  // everything above this layer is none the wiser.
+  VNET_TRACE(Lobby, "traversal introduced us to {}:{}", addr.host, addr.port);
+  s_state.server_address = addr;
+  ENetPeer* const peer = enet_host_connect(s_state.host, &addr, CHANNEL_COUNT, 0);
+  s_state.server_peer.store(peer);
+  if (!peer)
+  {
+    SetStatus(Status::Failed, "Could not open a connection");
+    return;
+  }
+  SetStatus(Status::Connecting, "Connecting");
+}
+
+void TraversalHandler::OnConnectFailed(Common::TraversalConnectFailedReason reason)
+{
+  using Reason = Common::TraversalConnectFailedReason;
+  switch (reason)
+  {
+  case Reason::ClientDidntRespond:
+    SetStatus(Status::Failed, "The host did not respond");
+    break;
+  case Reason::ClientFailure:
+    SetStatus(Status::Failed, "The traversal server rejected the connection");
+    break;
+  case Reason::NoSuchClient:
+    SetStatus(Status::Failed, "No room with that code");
+    break;
+  default:
+    SetStatus(Status::Failed, "Could not connect through the traversal server");
+    break;
+  }
+  VNET_TRACE(Lobby, "traversal connect failed ({})", static_cast<int>(reason));
 }
 
 // Lobby thread only. Moves anything SendPayload queued onto the wire.
@@ -902,6 +1027,11 @@ void ThreadFunc()
   {
     DrainOutgoing();
 
+    // Traversal packets ride the same socket and are pulled out by the intercept
+    // that TraversalClient installed, but its own retransmits are on us to pump.
+    if (s_state.use_traversal && Common::g_TraversalClient)
+      Common::g_TraversalClient->HandleResends();
+
     ENetEvent event;
     while (enet_host_service(s_state.host, &event, SERVICE_TIMEOUT_MS) > 0)
     {
@@ -941,6 +1071,37 @@ void ThreadFunc()
 }
 }  // namespace
 
+// Brings up the traversal client and borrows its ENetHost. Returns false with
+// the status already set on failure.
+//
+// listen_port 0 lets the OS pick, which is the point: the whole reason to use a
+// traversal server is not having to own a particular port on the router.
+bool StartTraversal(u16 listen_port)
+{
+  const std::string server = Config::Get(Config::MAIN_LOBBY_TRAVERSAL_SERVER);
+  const u16 server_port = Config::Get(Config::MAIN_LOBBY_TRAVERSAL_PORT);
+  const u16 server_port_alt = Config::Get(Config::MAIN_LOBBY_TRAVERSAL_PORT_ALT);
+
+  if (!Common::EnsureTraversalClient(server, server_port, server_port_alt, listen_port))
+  {
+    SetStatus(Status::Failed, "Could not reach the traversal server " + server);
+    return false;
+  }
+
+  s_state.host = Common::g_MainNetHost.get();
+  s_state.owns_host = false;
+  if (!s_state.host)
+  {
+    SetStatus(Status::Failed, "Traversal client produced no socket");
+    return false;
+  }
+
+  Common::g_TraversalClient->m_Client = &s_traversal_handler;
+  if (Common::g_TraversalClient->HasFailed())
+    Common::g_TraversalClient->ReconnectToServer();
+  return true;
+}
+
 bool Start(Role role, const std::string& address, u16 port, const std::string& nickname)
 {
   Stop();
@@ -965,6 +1126,7 @@ bool Start(Role role, const std::string& address, u16 port, const std::string& n
     s_state.join_address = address;
   }
   s_state.role = role;
+  s_state.use_traversal = Config::Get(Config::MAIN_LOBBY_USE_TRAVERSAL);
   s_state.stop_requested.store(false);
   s_state.reconnect_requested.store(false);
   s_state.virtual_ip.store(0);
@@ -974,15 +1136,26 @@ bool Start(Role role, const std::string& address, u16 port, const std::string& n
 
   if (role == Role::Host)
   {
-    ENetAddress listen{};
-    listen.host = ENET_HOST_ANY;
-    listen.port = port;
-    s_state.host = enet_host_create(&listen, MAX_CLIENTS, CHANNEL_COUNT, 0, 0);
-    if (!s_state.host)
+    if (s_state.use_traversal)
     {
-      enet_deinitialize();
-      SetStatus(Status::Failed, "Port " + std::to_string(port) + " is already in use");
-      return false;
+      // The traversal client owns the socket, and installs an intercept on it so
+      // its own protocol is filtered out before ENet ever sees it. Everything
+      // else - the lobby's traffic - reaches us untouched.
+      if (!StartTraversal(0))
+        return false;
+    }
+    else
+    {
+      ENetAddress listen{};
+      listen.host = ENET_HOST_ANY;
+      listen.port = port;
+      s_state.host = enet_host_create(&listen, MAX_CLIENTS, CHANNEL_COUNT, 0, 0);
+      if (!s_state.host)
+      {
+        enet_deinitialize();
+        SetStatus(Status::Failed, "Port " + std::to_string(port) + " is already in use");
+        return false;
+      }
     }
 
     s_state.virtual_ip.store(HOST_IP);
@@ -990,11 +1163,37 @@ bool Start(Role role, const std::string& address, u16 port, const std::string& n
       std::lock_guard lock{s_state.mutex};
       s_state.names[HOST_IP] = nickname.empty() ? "Host" : nickname;
     }
-    SetStatus(Status::Connected, "Hosting on port " + std::to_string(port));
-    VNET_TRACE(Lobby, "hosting on port {} as {}", port, FormatIP(HOST_IP));
+
+    if (s_state.use_traversal)
+    {
+      // Connected once the server hands over a room code, not before, so there
+      // is something to tell people to dial.
+      SetStatus(Status::Connecting, "Getting a room code");
+      VNET_TRACE(Lobby, "hosting via traversal as {}", FormatIP(HOST_IP));
+    }
+    else
+    {
+      SetStatus(Status::Connected, "Hosting on port " + std::to_string(port));
+      VNET_TRACE(Lobby, "hosting on port {} as {}", port, FormatIP(HOST_IP));
+    }
   }
   else
   {
+    if (s_state.use_traversal)
+    {
+      if (!StartTraversal(0))
+        return false;
+
+      // Dialling waits for the traversal server to answer; see
+      // TraversalHandler::OnTraversalStateChanged.
+      SetStatus(Status::Connecting, "Contacting the traversal server");
+      VNET_TRACE(Lobby, "joining room {}", address);
+
+      s_state.active.store(true);
+      s_state.thread = std::thread(ThreadFunc);
+      return true;
+    }
+
     s_state.host = enet_host_create(nullptr, 1, CHANNEL_COUNT, 0, 0);
     if (!s_state.host)
     {
@@ -1050,9 +1249,26 @@ void Stop()
 
   if (s_state.host)
   {
-    enet_host_destroy(s_state.host);
+    if (s_state.owns_host)
+    {
+      enet_host_destroy(s_state.host);
+      enet_deinitialize();
+    }
+    else
+    {
+      // Borrowed from the traversal client, which owns it and reuses it across
+      // sessions. Detach from it first: its callbacks reach into lobby state
+      // that is about to be cleared.
+      if (Common::g_TraversalClient)
+        Common::g_TraversalClient->m_Client = nullptr;
+      Common::ReleaseTraversalClient();
+    }
     s_state.host = nullptr;
-    enet_deinitialize();
+    s_state.owns_host = true;
+  }
+  {
+    std::lock_guard lock{s_state.mutex};
+    s_state.host_code.clear();
   }
   s_state.server_peer.store(nullptr);
 
@@ -1123,6 +1339,12 @@ bool IsActive()
 Status GetStatus()
 {
   return s_state.status.load();
+}
+
+std::string GetHostCode()
+{
+  std::lock_guard lock{s_state.mutex};
+  return s_state.host_code;
 }
 
 std::string GetStatusText()
