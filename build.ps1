@@ -3,9 +3,13 @@
     Builds the launcher on Windows.
 
 .DESCRIPTION
-    A wrapper around the CMake presets already in this repository, plus the two
-    things that make a command-line MSVC build work: finding the compiler, and
-    turning on the optimisations that are off by default.
+    A wrapper around the CMake presets already in this repository, plus the thing
+    a command-line MSVC build needs and does not get for free: the compiler
+    environment, which Ninja does not find on its own.
+
+    The default is set up for iterating - incremental, no link-time
+    optimisation, and only the launcher rather than every target. Add -LTO when
+    building something to keep.
 
     Output goes to build\<config>\x64\Binaries, which is where the virtual
     network's peer test already expects to find it.
@@ -14,8 +18,9 @@
     release (default) or debug.
 
 .PARAMETER Target
-    What to build. Default is everything. "dolphin-emu" is just the launcher and
-    is quicker; "tests" builds the unit tests, including the virtual network's.
+    What to build. Defaults to the launcher alone, which is what you want while
+    working. "tests" builds the unit tests, including the virtual network's, and
+    "all" builds everything.
 
 .PARAMETER Fresh
     Delete the build directory first.
@@ -23,19 +28,23 @@
     Worth knowing: CMake caches which languages are enabled, so a change to that
     - the icon resource fix, for one - is only picked up by a fresh configure.
 
-.PARAMETER NoLTO
-    Skip link-time optimisation. It is on by default here because it is worth
-    having and upstream leaves it off, but it makes linking considerably slower,
-    so it is the first thing to drop while iterating.
+.PARAMETER LTO
+    Link-time optimisation. Off by default because it makes linking
+    considerably slower and that cost lands on every single build; worth turning
+    on for one you are going to keep and use.
+
+    Toggling it changes compile flags, so the next build after adding or
+    removing it is a full rebuild.
 
 .PARAMETER Jobs
     Parallel compile jobs. Defaults to the number of processors.
 
 .EXAMPLE
-    .\build.ps1
-    .\build.ps1 -Config debug -Target dolphin-emu
-    .\build.ps1 -Fresh -NoLTO
-    .\build.ps1 -Target tests
+    .\build.ps1                  # iterate: incremental, launcher only
+    .\build.ps1 -LTO             # a build to keep
+    .\build.ps1 -Fresh -LTO      # ... from scratch
+    .\build.ps1 -Target tests    # unit tests
+    .\build.ps1 -Config debug
 #>
 
 [CmdletBinding()]
@@ -43,11 +52,11 @@ param(
     [ValidateSet('release', 'debug')]
     [string]$Config = 'release',
 
-    [string]$Target = '',
+    [string]$Target = 'dolphin-emu',
 
     [switch]$Fresh,
 
-    [switch]$NoLTO,
+    [switch]$LTO,
 
     [int]$Jobs = 0
 )
@@ -133,9 +142,9 @@ if ($Fresh -and (Test-Path $buildDir)) {
 Step "Configuring ($configurePreset)"
 
 $cacheArgs = @(
-    # Off upstream. Worth the link time for a build that is going to be used
-    # rather than iterated on.
-    "-DENABLE_LTO=$(if ($NoLTO) { 'OFF' } else { 'ON' })",
+    # Off unless asked for: it is a large part of the link time, and that cost
+    # lands on every build rather than only on the one being kept.
+    "-DENABLE_LTO=$(if ($LTO) { 'ON' } else { 'OFF' })",
 
     # None of these are wanted by a launcher for one game, and each is build
     # time and binary size that buys nothing.
@@ -163,9 +172,11 @@ if ($LASTEXITCODE -ne 0) { Fail 'Configure failed.' }
 if ($Jobs -le 0) { $Jobs = [Environment]::ProcessorCount }
 
 $buildArgs = @('--build', $buildDir, '--parallel', $Jobs)
-if ($Target) { $buildArgs += @('--target', $Target) }
+# "all" is spelled by not naming a target; Ninja's own "all" target excludes
+# things that are deliberately built only on demand.
+if ($Target -and $Target -ne 'all') { $buildArgs += @('--target', $Target) }
 
-Step "Building$(if ($Target) { " $Target" }) with $Jobs jobs"
+Step "Building $(if ($Target) { $Target } else { 'everything' }) with $Jobs jobs$(if ($LTO) { ', LTO on' })"
 
 $stopwatch = [Diagnostics.Stopwatch]::StartNew()
 & cmake @buildArgs
