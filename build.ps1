@@ -115,11 +115,56 @@ if (-not $env:VSCMD_VER) {
     }
 }
 
-foreach ($tool in @('cmake', 'ninja')) {
-    if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
-        Fail "$tool is not on PATH. Both ship with the Visual Studio C++ workload."
+# --- The build tools -------------------------------------------------------
+#
+# Resolved to explicit paths rather than trusting PATH, because a devkitPro or
+# MSYS2 or Cygwin install puts its own cmake and ninja there, and those are not
+# interchangeable with these: a POSIX cmake emits POSIX paths, which the Windows
+# cl.exe and ninja cannot open. The failure that produces is
+# "missing and no known rule to make it" against a path like /home/you/..., which
+# says nothing about the actual cause.
+#
+# Visual Studio's own copies are preferred: they are known to be Windows-native
+# and known to match the toolchain vcvars just set up.
+
+function Find-Tool([string]$name, [string[]]$candidates) {
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path $candidate)) { return (Resolve-Path $candidate).Path }
     }
+
+    $onPath = Get-Command $name -ErrorAction SilentlyContinue
+    if ($onPath) {
+        $source = $onPath.Source
+        # A POSIX toolchain's copy. Rejected rather than used, because the errors
+        # it causes point everywhere except at itself.
+        if ($source -notmatch 'msys|cygwin|devkitpro|mingw|[/\\]usr[/\\]bin') {
+            return $source
+        }
+        Write-Host "    ignoring $source (not a Windows build of $name)" -ForegroundColor DarkYellow
+    }
+    return $null
 }
+
+$vsRoot = $env:VSINSTALLDIR
+$vsCMake = if ($vsRoot) {
+    Join-Path $vsRoot 'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe'
+} else { $null }
+$vsNinja = if ($vsRoot) {
+    Join-Path $vsRoot 'Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe'
+} else { $null }
+
+$cmakeExe = Find-Tool 'cmake' @($vsCMake, (Join-Path $env:ProgramFiles 'CMake\bin\cmake.exe'))
+if (-not $cmakeExe) {
+    Fail 'No Windows cmake found. Install "C++ CMake tools for Windows" in the Visual Studio installer, or CMake for Windows.'
+}
+
+$ninjaExe = Find-Tool 'ninja' @($vsNinja)
+if (-not $ninjaExe) {
+    Fail 'No Windows ninja found. It ships with "C++ CMake tools for Windows" in the Visual Studio installer.'
+}
+
+Write-Host "    cmake: $cmakeExe"
+Write-Host "    ninja: $ninjaExe"
 
 # --- Submodules ------------------------------------------------------------
 #
@@ -155,7 +200,11 @@ $cacheArgs = @(
 
     # The memory inspector's dashboard server. Deliberately off: it opens a
     # listening socket, which is not something to hand to anyone else.
-    '-DMKW_MEMORY_INSPECTOR_WEB=OFF'
+    '-DMKW_MEMORY_INSPECTOR_WEB=OFF',
+
+    # Named explicitly for the same reason the tools are resolved above: left to
+    # itself, CMake finds whichever ninja PATH offers first.
+    "-DCMAKE_MAKE_PROGRAM=$ninjaExe"
 )
 
 # ccache if it happens to be installed; a large win on a rebuild, no loss if not.
@@ -164,7 +213,7 @@ if (Get-Command ccache -ErrorAction SilentlyContinue) {
     Write-Host '    ccache found, enabling'
 }
 
-& cmake --preset $configurePreset @cacheArgs
+& $cmakeExe --preset $configurePreset @cacheArgs
 if ($LASTEXITCODE -ne 0) { Fail 'Configure failed.' }
 
 # --- Build -----------------------------------------------------------------
@@ -179,7 +228,7 @@ if ($Target -and $Target -ne 'all') { $buildArgs += @('--target', $Target) }
 Step "Building $(if ($Target) { $Target } else { 'everything' }) with $Jobs jobs$(if ($LTO) { ', LTO on' })"
 
 $stopwatch = [Diagnostics.Stopwatch]::StartNew()
-& cmake @buildArgs
+& $cmakeExe @buildArgs
 if ($LASTEXITCODE -ne 0) { Fail 'Build failed.' }
 $stopwatch.Stop()
 
